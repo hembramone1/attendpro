@@ -6,7 +6,7 @@
 
 const DB = (() => {
   const DB_NAME = 'AttendancePro';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let _db = null;
 
   /* -------- Utilities -------- */
@@ -52,6 +52,12 @@ const DB = (() => {
         }
         if (!db.objectStoreNames.contains('customFields')) {
           db.createObjectStore('customFields', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('jobs')) {
+          const s = db.createObjectStore('jobs', { keyPath: 'id' });
+          s.createIndex('status', 'status', { unique: false });
+          s.createIndex('section', 'section', { unique: false });
+          s.createIndex('date', 'date', { unique: false });
         }
       };
 
@@ -189,5 +195,50 @@ const DB = (() => {
     delete(id) { return p(store('customFields', 'readwrite').delete(id)); }
   };
 
-  return { open, uid, employees, sections, attendance, settings, customFields };
+  /* -------- Jobs -------- */
+
+  const jobs = {
+    getAll() { return p(store('jobs').getAll()); },
+    get(id) { return p(store('jobs').get(id)); },
+    async add(data) {
+      const job = {
+        id: uid(),
+        title: (data.title || '').trim(),
+        section: (data.section || 'General').trim(),
+        description: (data.description || '').trim(),
+        assignedEmps: data.assignedEmps || [], // Array of { empId, name, section }
+        status: 'active', // 'active' | 'completed'
+        startTime: data.startTime || Date.now(),
+        endTime: null,
+        durationMs: null,
+        completionNotes: '',
+        date: data.date || new Date().toISOString().split('T')[0],
+        createdAt: Date.now()
+      };
+      if (!job.title) throw new Error('Job title is required');
+      if (!job.assignedEmps.length) throw new Error('Assign at least one manpower');
+      await p(store('jobs', 'readwrite').put(job));
+      return job;
+    },
+    async complete(id, notes = '') {
+      const job = await jobs.get(id);
+      if (!job) throw new Error('Job not found');
+      job.status = 'completed';
+      job.endTime = Date.now();
+      job.durationMs = Math.max(0, job.endTime - job.startTime);
+      job.completionNotes = notes.trim();
+      job.updatedAt = Date.now();
+      await p(store('jobs', 'readwrite').put(job));
+      return job;
+    },
+    async update(job) {
+      job.updatedAt = Date.now();
+      await p(store('jobs', 'readwrite').put(job));
+      return job;
+    },
+    delete(id) { return p(store('jobs', 'readwrite').delete(id)); },
+    clearAll()  { return p(store('jobs', 'readwrite').clear()); }
+  };
+
+  return { open, uid, employees, sections, attendance, settings, customFields, jobs };
 })();

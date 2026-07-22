@@ -2,7 +2,7 @@
    AttendPro Service Worker — Offline Support
    ============================================= */
 
-const CACHE_NAME = 'attendpro-v8';
+const CACHE_NAME = 'attendpro-v9';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const STATIC_ASSETS = [
   './js/firebase-sync.js',
   './js/manpower.js',
   './js/attendance.js',
+  './js/jobs.js',
   './js/reports.js',
   './js/app.js',
   './icons/icon-192.png',

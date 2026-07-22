@@ -39,6 +39,7 @@ const App = (() => {
       case 'dashboard':  renderDashboard(); break;
       case 'manpower':   Manpower.render(); break;
       case 'attendance': Attendance.render(); break;
+      case 'jobs':       Jobs.render(); break;
       case 'reports':    Reports.render(); break;
       case 'settings':   Settings.render(); break;
     }
