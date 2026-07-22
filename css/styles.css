@@ -810,25 +810,25 @@ a { color: inherit; }
 #att-img-tpl {
   position: fixed; left: -9999px; top: 0;
   width: 720px; font-family: 'Inter', Arial, sans-serif;
-  background: #070c18; color: #eef2ff; padding: 36px;
+  background: #ffffff; color: #0f172a; padding: 36px;
   pointer-events: none;
 }
-.ait-header { text-align: center; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 2px solid #00e5c0; }
-.ait-company { font-size: 26px; font-weight: 900; color: #00e5c0; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px; }
-.ait-title   { font-size: 14px; color: #94a3b8; margin-bottom: 14px; font-weight: 400; }
+.ait-header { text-align: center; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 2px solid #00897b; }
+.ait-company { font-size: 26px; font-weight: 900; color: #00796b; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px; }
+.ait-title   { font-size: 14px; color: #475569; margin-bottom: 14px; font-weight: 500; }
 .ait-meta    { display: flex; justify-content: center; gap: 28px; font-size: 13px; }
-.ait-meta-item span:first-child { color: #94a3b8; }
-.ait-meta-item span:last-child  { font-weight: 700; color: #eef2ff; margin-left: 4px; }
-.ait-section { margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }
-.ait-sec-hd  { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(0,229,192,0.07); border-bottom: 1px solid rgba(0,229,192,0.14); }
-.ait-sec-name { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #00e5c0; }
+.ait-meta-item span:first-child { color: #64748b; }
+.ait-meta-item span:last-child  { font-weight: 700; color: #0f172a; margin-left: 4px; }
+.ait-section { margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.ait-sec-hd  { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f0fdf4; border-bottom: 1px solid #cbd5e1; }
+.ait-sec-name { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0f766e; }
 .ait-sec-cnt  { font-size: 13px; font-weight: 800; }
-.ait-emp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 10px 14px; }
-.ait-emp      { font-size: 11px; padding: 5px 8px; background: rgba(255,255,255,0.03); border-radius: 5px; display: flex; align-items: center; gap: 7px; }
-.ait-emp-num  { color: #475569; font-size: 10px; min-width: 14px; }
-.ait-emp-name { color: #eef2ff; font-weight: 500; }
-.ait-footer   { display: flex; justify-content: space-between; align-items: center; padding-top: 16px; margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.07); font-size: 11px; color: #94a3b8; }
-.ait-total    { font-size: 15px; font-weight: 800; color: #eef2ff; }
+.ait-emp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 12px 14px; background: #f8fafc; }
+.ait-emp      { font-size: 11px; padding: 6px 10px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; display: flex; align-items: center; gap: 7px; }
+.ait-emp-num  { color: #64748b; font-size: 10px; min-width: 14px; font-weight: 700; }
+.ait-emp-name { color: #0f172a; font-weight: 600; }
+.ait-footer   { display: flex; justify-content: space-between; align-items: center; padding-top: 16px; margin-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
+.ait-total    { font-size: 15px; font-weight: 800; color: #0f172a; }
 
 /* ========================
    MISC

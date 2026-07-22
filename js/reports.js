@@ -249,7 +249,7 @@ const Reports = (() => {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#070c18',
+        backgroundColor: '#ffffff',
         logging: false
       });
 
@@ -285,7 +285,7 @@ const Reports = (() => {
 
       const canvas = await html2canvas(tpl, {
         scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#070c18', logging: false
+        backgroundColor: '#ffffff', logging: false
       });
       tpl.style.display = 'none';
 
