@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#070c18">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AttendPro">
+  <meta name="description" content="Industrial shift attendance management for MCL, ILBL OCP & Dumper Workshop">
+
+  <title>AttendPro — Attendance Manager</title>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap">
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- SEO -->
+  <meta property="og:title" content="AttendPro — Attendance Manager">
+  <meta property="og:description" content="Industrial shift attendance tracking with offline support">
+  <meta property="og:type" content="website">
+
+  <!-- Google Identity Services (for Drive OAuth) — loaded async, no blocking -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<!-- ╔══════════════════════════════════════════╗
+     ║           APP SHELL                      ║
+     ╚══════════════════════════════════════════╝ -->
+<div id="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar" role="banner">
+    <div class="topbar-brand">
+      <div class="topbar-logo" aria-hidden="true">📋</div>
+      <div class="topbar-info">
+        <div class="topbar-title">AttendPro</div>
+        <div class="topbar-company" id="topbar-company">MCL</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="theme-toggle-btn" title="Cycle Theme (Light / Dark / Auto)" aria-label="Cycle Theme">☀️</button>
+      <button class="icon-btn" id="topbar-firebase-dot" title="Firebase Sync" aria-label="Firebase status" style="opacity:0.3;font-size:16px">🔥</button>
+      <button class="icon-btn" id="topbar-sync-btn" title="Google Drive Sync" aria-label="Sync to Google Drive" style="opacity:0.35">☁️</button>
+      <button class="icon-btn" id="topbar-excel-btn" title="Export Excel" aria-label="Export Excel">📊</button>
+      <button class="icon-btn" id="topbar-share-btn" title="Share today's attendance" aria-label="Share attendance">📤</button>
+    </div>
+  </header>
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content" role="main">
+
+    <!-- ══════ DASHBOARD SCREEN ══════ -->
+    <section class="screen active" id="screen-dashboard" aria-label="Dashboard">
+      <!-- Rendered by app.js renderDashboard() -->
+      <div style="display:flex;align-items:center;justify-content:center;height:200px">
+        <div class="spinner"></div>
+      </div>
+    </section>
+
+    <!-- ══════ MANPOWER SCREEN ══════ -->
+    <section class="screen" id="screen-manpower" aria-label="Manpower Management">
+      <!-- Rendered by manpower.js render() -->
+    </section>
+
+    <!-- ══════ ATTENDANCE SCREEN ══════ -->
+    <section class="screen" id="screen-attendance" aria-label="Take Attendance">
+      <!-- Rendered by attendance.js render() -->
+    </section>
+
+    <!-- ══════ REPORTS SCREEN ══════ -->
+    <section class="screen" id="screen-reports" aria-label="Reports">
+      <!-- Rendered by reports.js render() -->
+    </section>
+
+    <!-- ══════ SETTINGS SCREEN ══════ -->
+    <section class="screen" id="screen-settings" aria-label="Settings">
+      <!-- Rendered by settings.js render() -->
+    </section>
+
+  </main>
+
+  <!-- ATTENDANCE IMAGE TEMPLATE (off-screen, captured by html2canvas) -->
+  <div id="att-img-tpl" aria-hidden="true"></div>
+
+  <!-- BOTTOM NAVIGATION -->
+  <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
+    <button class="nav-btn active" data-screen="dashboard" id="nav-dashboard" aria-label="Dashboard">
+      <span class="nav-icon" aria-hidden="true">🏠</span>
+      <span class="nav-label">Dashboard</span>
+    </button>
+    <button class="nav-btn" data-screen="manpower" id="nav-manpower" aria-label="Manpower">
+      <span class="nav-icon" aria-hidden="true">👥</span>
+      <span class="nav-label">Manpower</span>
+    </button>
+    <button class="nav-btn" data-screen="attendance" id="nav-attendance" aria-label="Attendance">
+      <span class="nav-icon" aria-hidden="true">✅</span>
+      <span class="nav-label">Attendance</span>
+    </button>
+    <button class="nav-btn" data-screen="reports" id="nav-reports" aria-label="Reports">
+      <span class="nav-icon" aria-hidden="true">📊</span>
+      <span class="nav-label">Reports</span>
+    </button>
+    <button class="nav-btn" data-screen="settings" id="nav-settings" aria-label="Settings">
+      <span class="nav-icon" aria-hidden="true">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+</div><!-- #app -->
+
+<!-- ═══════════════════════════════════════════
+     THIRD-PARTY LIBRARIES (CDN)
+══════════════════════════════════════════════ -->
+
+<!-- SheetJS — Excel export/import -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+<!-- html2canvas — Attendance image generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+
+<!-- ═══════════════════════════════════════════
+     APP MODULES (order matters!)
+══════════════════════════════════════════════ -->
+<script src="js/db.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/drive.js"></script>
+<script src="js/firebase-sync.js"></script>
+<script src="js/manpower.js"></script>
+<script src="js/attendance.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
