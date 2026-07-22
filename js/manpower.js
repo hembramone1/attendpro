@@ -472,6 +472,10 @@ const Manpower = (() => {
     });
 
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    downloadFile(csv, `Manpower_${Settings.getCompany()}_${fmtDate(new Date())}.csv`, 'text/csv');
+    App.toast('Master data exported', 'success');
+  }
+
   /* -------- Download Format Template -------- */
 
   function downloadTemplate() {
