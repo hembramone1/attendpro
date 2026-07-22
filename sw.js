@@ -2,7 +2,7 @@
    AttendPro Service Worker — Offline Support
    ============================================= */
 
-const CACHE_NAME = 'attendpro-v4';
+const CACHE_NAME = 'attendpro-v5';
 const STATIC_ASSETS = [
   './',
   './index.html',

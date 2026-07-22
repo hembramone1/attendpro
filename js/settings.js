@@ -5,7 +5,7 @@
    ============================================= */
 
 const Settings = (() => {
-  const COMPANIES = ['MCL', 'ILBL OCP', 'DUMPER WORKSHOP'];
+  const COMPANIES = ['Dumper Workshop'];
   const SHIFTS = {
     'General': '8:00 AM – 6:00 PM',
     '1st':     '6:00 AM – 2:00 PM',
@@ -13,7 +13,7 @@ const Settings = (() => {
     '3rd':     '10:00 PM – 6:00 AM'
   };
 
-  let _company = 'MCL';
+  let _company = 'Dumper Workshop';
   let _sections = [];
   let _customFields = [];
 
@@ -26,7 +26,7 @@ const Settings = (() => {
   function getShiftTime(shift) { return SHIFTS[shift] || ''; }
 
   async function loadAll() {
-    _company      = (await DB.settings.get('company')) || 'MCL';
+    _company      = (await DB.settings.get('company')) || 'Dumper Workshop';
     _sections     = await DB.sections.getAll();
     _customFields = await DB.customFields.getAll();
     _updateTopbar();
@@ -65,18 +65,6 @@ const Settings = (() => {
     return `
       <div class="screen-title">⚙️ Settings</div>
       <div class="screen-sub">Configure app preferences</div>
-
-      <!-- Company Selection -->
-      <div class="settings-section">
-        <div class="sec-label">Company / Site</div>
-        <div class="company-selector" id="company-selector">
-          ${COMPANIES.map(c => `
-            <button class="company-btn ${c === _company ? 'active' : ''}" data-company="${c}">
-              ${c}
-            </button>
-          `).join('')}
-        </div>
-      </div>
 
       <!-- Shift Timings Info -->
       <div class="settings-section">
