@@ -1,6 +1,6 @@
 {
-  "name": "AttendPro - Attendance Manager",
-  "short_name": "AttendPro",
+  "name": "Manpower Records",
+  "short_name": "Manpower Records",
   "description": "Industrial shift attendance management for MCL, ILBL OCP & Dumper Workshop",
   "start_url": "/",
   "display": "standalone",

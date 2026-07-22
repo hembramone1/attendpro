@@ -259,7 +259,7 @@ const App = (() => {
   async function init() {
     // Register service worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').catch(() => {});
     }
 
     // Capture install prompt
@@ -342,6 +342,15 @@ const App = (() => {
 
     // Render first screen
     navigate(startScreen);
+
+    // Hide quick splash screen smoothly
+    setTimeout(() => {
+      const splash = document.getElementById('splash-screen');
+      if (splash) {
+        splash.classList.add('fade-out');
+        setTimeout(() => splash.remove(), 400);
+      }
+    }, 250);
   }
 
   document.addEventListener('DOMContentLoaded', init);

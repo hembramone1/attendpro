@@ -344,7 +344,7 @@ const Settings = (() => {
         <div class="settings-group">
           <div class="settings-row">
             <div class="settings-row-left">
-              <div class="settings-row-label">AttendPro</div>
+              <div class="settings-row-label">Manpower Records</div>
               <div class="settings-row-desc">Industrial Attendance Manager v1.0</div>
             </div>
             <div class="chip chip-accent">PWA</div>
