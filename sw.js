@@ -2,19 +2,21 @@
    AttendPro Service Worker — Offline Support
    ============================================= */
 
-const CACHE_NAME = 'attendpro-v1';
+const CACHE_NAME = 'attendpro-v3';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/css/styles.css',
-  '/js/db.js',
-  '/js/settings.js',
-  '/js/manpower.js',
-  '/js/attendance.js',
-  '/js/reports.js',
-  '/js/app.js',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  './',
+  './index.html',
+  './css/styles.css',
+  './js/db.js',
+  './js/settings.js',
+  './js/drive.js',
+  './js/firebase-sync.js',
+  './js/manpower.js',
+  './js/attendance.js',
+  './js/reports.js',
+  './js/app.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 // CDN libraries to cache
