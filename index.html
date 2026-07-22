@@ -51,19 +51,21 @@
 
   <!-- TOP BAR -->
   <header class="topbar" role="banner">
-    <div class="topbar-brand">
-      <div class="topbar-logo" aria-hidden="true">📋</div>
-      <div class="topbar-info">
-        <div class="topbar-title">Manpower Records</div>
-        <div class="topbar-company" id="topbar-company">MCL</div>
+    <div class="topbar-content">
+      <div class="topbar-brand">
+        <div class="topbar-logo" aria-hidden="true">📋</div>
+        <div class="topbar-info">
+          <div class="topbar-title">Manpower Records</div>
+          <div class="topbar-company" id="topbar-company">MCL</div>
+        </div>
       </div>
-    </div>
-    <div class="topbar-actions">
-      <button class="icon-btn" id="theme-toggle-btn" title="Cycle Theme (Light / Dark / Auto)" aria-label="Cycle Theme">☀️</button>
-      <button class="icon-btn" id="topbar-firebase-dot" title="Firebase Sync" aria-label="Firebase status" style="opacity:0.3;font-size:16px">🔥</button>
-      <button class="icon-btn" id="topbar-sync-btn" title="Google Drive Sync" aria-label="Sync to Google Drive" style="opacity:0.35">☁️</button>
-      <button class="icon-btn" id="topbar-excel-btn" title="Export Excel" aria-label="Export Excel">📊</button>
-      <button class="icon-btn" id="topbar-share-btn" title="Share today's attendance" aria-label="Share attendance">📤</button>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="theme-toggle-btn" title="Cycle Theme (Light / Dark / Auto)" aria-label="Cycle Theme">☀️</button>
+        <button class="icon-btn" id="topbar-firebase-dot" title="Firebase Sync" aria-label="Firebase status" style="opacity:0.3;font-size:16px">🔥</button>
+        <button class="icon-btn" id="topbar-sync-btn" title="Google Drive Sync" aria-label="Sync to Google Drive" style="opacity:0.35">☁️</button>
+        <button class="icon-btn" id="topbar-excel-btn" title="Export Excel" aria-label="Export Excel">📊</button>
+        <button class="icon-btn" id="topbar-share-btn" title="Share today's attendance" aria-label="Share attendance">📤</button>
+      </div>
     </div>
   </header>
 
@@ -108,26 +110,28 @@
 
   <!-- BOTTOM NAVIGATION -->
   <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
-    <button class="nav-btn active" data-screen="dashboard" id="nav-dashboard" aria-label="Dashboard">
-      <span class="nav-icon" aria-hidden="true">🏠</span>
-      <span class="nav-label">Dashboard</span>
-    </button>
-    <button class="nav-btn" data-screen="manpower" id="nav-manpower" aria-label="Manpower">
-      <span class="nav-icon" aria-hidden="true">👥</span>
-      <span class="nav-label">Manpower</span>
-    </button>
-    <button class="nav-btn" data-screen="attendance" id="nav-attendance" aria-label="Attendance">
-      <span class="nav-icon" aria-hidden="true">✅</span>
-      <span class="nav-label">Attendance</span>
-    </button>
-    <button class="nav-btn" data-screen="reports" id="nav-reports" aria-label="Reports">
-      <span class="nav-icon" aria-hidden="true">📊</span>
-      <span class="nav-label">Reports</span>
-    </button>
-    <button class="nav-btn" data-screen="settings" id="nav-settings" aria-label="Settings">
-      <span class="nav-icon" aria-hidden="true">⚙️</span>
-      <span class="nav-label">Settings</span>
-    </button>
+    <div class="bottom-nav-content">
+      <button class="nav-btn active" data-screen="dashboard" id="nav-dashboard" aria-label="Dashboard">
+        <span class="nav-icon" aria-hidden="true">🏠</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-btn" data-screen="manpower" id="nav-manpower" aria-label="Manpower">
+        <span class="nav-icon" aria-hidden="true">👥</span>
+        <span class="nav-label">Manpower</span>
+      </button>
+      <button class="nav-btn" data-screen="attendance" id="nav-attendance" aria-label="Attendance">
+        <span class="nav-icon" aria-hidden="true">✅</span>
+        <span class="nav-label">Attendance</span>
+      </button>
+      <button class="nav-btn" data-screen="reports" id="nav-reports" aria-label="Reports">
+        <span class="nav-icon" aria-hidden="true">📊</span>
+        <span class="nav-label">Reports</span>
+      </button>
+      <button class="nav-btn" data-screen="settings" id="nav-settings" aria-label="Settings">
+        <span class="nav-icon" aria-hidden="true">⚙️</span>
+        <span class="nav-label">Settings</span>
+      </button>
+    </div>
   </nav>
 
 </div><!-- #app -->

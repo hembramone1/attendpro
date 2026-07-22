@@ -19,7 +19,8 @@
 
   --topbar-h:    60px;
   --nav-h:       68px;
-  --max-w:       520px;
+  --max-w:       100%;
+  --content-w:   540px;
 
   --ease:        cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -229,8 +230,8 @@ a { color: inherit; }
 ======================== */
 #app {
   display: flex; flex-direction: column;
-  height: 100dvh;
-  max-width: var(--max-w); margin: 0 auto;
+  height: 100dvh; width: 100%;
+  max-width: 100vw; margin: 0 auto;
   position: relative; overflow: hidden;
   background: var(--bg-primary);
 }
@@ -241,10 +242,15 @@ a { color: inherit; }
 .topbar {
   height: var(--topbar-h); flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   background: var(--glass-bg); backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--glass-border);
   position: relative; z-index: 100;
+  width: 100%;
+}
+.topbar-content {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; max-width: 960px; margin: 0 auto;
 }
 
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
@@ -298,6 +304,8 @@ a { color: inherit; }
 .screen {
   display: none; padding: 16px;
   min-height: 100%;
+  max-width: 960px;
+  margin: 0 auto;
   animation: screenIn 0.22s var(--ease);
 }
 .screen.active { display: block; }
@@ -312,11 +320,16 @@ a { color: inherit; }
 ======================== */
 .bottom-nav {
   height: var(--nav-h); flex-shrink: 0;
-  display: flex; align-items: stretch;
+  display: flex; align-items: stretch; justify-content: center;
   background: var(--glass-bg); backdrop-filter: var(--glass-blur);
   border-top: 1px solid var(--glass-border);
   padding: 0 4px;
   padding-bottom: env(safe-area-inset-bottom, 0);
+  width: 100%;
+}
+.bottom-nav-content {
+  display: flex; align-items: stretch;
+  width: 100%; max-width: 600px;
 }
 
 .nav-btn {
@@ -842,9 +855,22 @@ a { color: inherit; }
 /* ========================
    RESPONSIVE
 ======================== */
-@media (min-width: 520px) {
-  #app { box-shadow: 0 0 80px rgba(0,0,0,0.6); }
-  .fab { right: calc((100vw - var(--max-w)) / 2 + 16px); }
+@media (min-width: 640px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .att-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 768px) {
+  .screen {
+    padding: 24px 32px;
+  }
+  .fab {
+    right: calc(50vw - 300px);
+  }
 }
 
 /* ========================
