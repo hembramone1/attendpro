@@ -34,8 +34,9 @@ const Manpower = (() => {
           <div class="screen-sub">Manage your workforce</div>
         </div>
         <div class="flex gap-8">
-          <button class="icon-btn" id="mp-import-btn" title="Import CSV/Excel">📂</button>
-          <button class="icon-btn" id="mp-export-btn" title="Export CSV">💾</button>
+          <button class="btn btn-sm btn-outline" id="mp-template-btn" title="Download Excel Format Template">📄 Format</button>
+          <button class="btn btn-sm btn-outline" id="mp-import-btn" title="Import CSV/Excel">📂 Import</button>
+          <button class="btn btn-sm btn-outline" id="mp-export-btn" title="Export CSV">💾 Export</button>
         </div>
       </div>
 
@@ -132,6 +133,9 @@ const Manpower = (() => {
 
     // FAB - add employee
     document.getElementById('mp-add-fab').addEventListener('click', showAddModal);
+
+    // Template format download button
+    document.getElementById('mp-template-btn').addEventListener('click', downloadTemplate);
 
     // Import button
     document.getElementById('mp-import-btn').addEventListener('click', () => {
@@ -468,8 +472,31 @@ const Manpower = (() => {
     });
 
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    downloadFile(csv, `Manpower_${Settings.getCompany()}_${fmtDate(new Date())}.csv`, 'text/csv');
-    App.toast('Master data exported', 'success');
+  /* -------- Download Format Template -------- */
+
+  function downloadTemplate() {
+    const stdHeaders = ['Name', 'Employee ID', 'Designation', 'Phone', 'Section'];
+    const cfNames    = _customFields.map(f => f.name);
+    const allHeaders = [...stdHeaders, ...cfNames];
+
+    const sampleRow1 = ['Rajesh Kumar', 'EMP101', 'Dumper Operator', '9876543210', 'Auto-Electrical', ...cfNames.map(() => '')];
+    const sampleRow2 = ['Suresh Verma', 'EMP102', 'Fitter', '9876543211', 'Mechanical', ...cfNames.map(() => '')];
+
+    const data = [allHeaders, sampleRow1, sampleRow2];
+
+    if (typeof XLSX !== 'undefined') {
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      // Auto width for columns
+      ws['!cols'] = allHeaders.map(() => ({ wch: 18 }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Manpower Format");
+      XLSX.writeFile(wb, "Manpower_Data_Format.xlsx");
+      App.toast('Format template downloaded (.xlsx)', 'success');
+    } else {
+      const csv = data.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+      downloadFile(csv, "Manpower_Data_Format.csv", 'text/csv');
+      App.toast('Format template downloaded (.csv)', 'success');
+    }
   }
 
   /* -------- Helpers -------- */
