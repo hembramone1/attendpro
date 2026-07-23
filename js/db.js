@@ -98,17 +98,95 @@ const DB = (() => {
 
     async import(list) {
       let added = 0;
+      let updated = 0;
       const errors = [];
+      const existing = await employees.getAll();
+
       for (const d of list) {
         try {
           if (d.section) await sections.ensure(d.section);
-          await employees.add(d);
-          added++;
+
+          const cleanName  = (d.name || '').trim();
+          const cleanEmpId = (d.employeeId || '').trim();
+          if (!cleanName) continue;
+
+          // Match by ID, Employee ID or Name (case-insensitive)
+          const match = existing.find(e =>
+            (d.id && e.id === d.id) ||
+            (cleanEmpId && e.employeeId && e.employeeId.toLowerCase() === cleanEmpId.toLowerCase()) ||
+            (cleanName && e.name && e.name.toLowerCase() === cleanName.toLowerCase())
+          );
+
+          if (match) {
+            // Overwrite existing record cleanly without creating a duplicate!
+            const updatedEmp = {
+              ...match,
+              ...d,
+              id: match.id, // keep original ID
+              name: cleanName,
+              employeeId: cleanEmpId || match.employeeId || '',
+              designation: (d.designation || match.designation || '').trim(),
+              phone: (d.phone || match.phone || '').trim(),
+              section: (d.section || match.section || '').trim(),
+              customFields: { ...(match.customFields || {}), ...(d.customFields || {}) },
+              updatedAt: Date.now()
+            };
+            await p(store('employees', 'readwrite').put(updatedEmp));
+            updated++;
+          } else {
+            // Truly new employee
+            const emp = {
+              id: d.id || uid(),
+              name: cleanName,
+              employeeId: cleanEmpId,
+              designation: (d.designation || '').trim(),
+              phone: (d.phone || '').trim(),
+              section: (d.section || '').trim(),
+              customFields: d.customFields || {},
+              createdAt: d.createdAt || Date.now()
+            };
+            await p(store('employees', 'readwrite').put(emp));
+            existing.push(emp); // add to in-memory list for next iterations
+            added++;
+          }
         } catch (e) {
           errors.push(`${d.name || 'Unknown'}: ${e.message}`);
         }
       }
-      return { added, errors };
+      return { added, updated, errors };
+    },
+
+    async deduplicate() {
+      const all = await employees.getAll();
+      const seen = new Map();
+      const idsToDelete = [];
+
+      for (const emp of all) {
+        const cleanName = (emp.name || '').trim().toLowerCase();
+        const cleanEmpId = (emp.employeeId || '').trim().toLowerCase();
+        const key = cleanEmpId || cleanName;
+        if (!key) continue;
+
+        if (seen.has(key)) {
+          const existingEmp = seen.get(key);
+          const existingScore = (existingEmp.employeeId ? 2 : 0) + (existingEmp.designation ? 1 : 0) + (existingEmp.section ? 1 : 0);
+          const currentScore  = (emp.employeeId ? 2 : 0) + (emp.designation ? 1 : 0) + (emp.section ? 1 : 0);
+
+          if (currentScore > existingScore) {
+            idsToDelete.push(existingEmp.id);
+            seen.set(key, emp);
+          } else {
+            idsToDelete.push(emp.id);
+          }
+        } else {
+          seen.set(key, emp);
+        }
+      }
+
+      for (const id of idsToDelete) {
+        await employees.delete(id);
+      }
+      return idsToDelete.length;
     },
 
     async clearAll() {

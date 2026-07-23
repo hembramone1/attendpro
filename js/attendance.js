@@ -46,6 +46,42 @@ const Attendance = (() => {
     refreshPresentChips();
   }
 
+  function getSectionPresentCount(secName) {
+    const isForemenTab = secName === '__foremen__';
+    const secEmps = (_state.employees || []).filter(emp => {
+      const desig = (emp.designation || '').toLowerCase().trim();
+      const isF = desig.includes('foreman') || desig.includes('foremen');
+      if (isForemenTab) return isF;
+      return emp.section === secName && !isF;
+    });
+    return secEmps.filter(e => _state.presentIds && _state.presentIds.has(e.id)).length;
+  }
+
+  function getSectionTabClass(secName) {
+    if (!secName || secName === 'all') return '';
+    const presentCnt = getSectionPresentCount(secName);
+    if (presentCnt > 0) {
+      return 'sec-has-present'; // Light Green
+    } else if (_state.isFinalized) {
+      return 'sec-zero-finalized'; // Light Red when finalized and section has 0 attendance
+    }
+    return '';
+  }
+
+  function updateSectionTabs() {
+    const container = document.getElementById('att-sec-tabs');
+    if (!container) return;
+
+    container.querySelectorAll('.sec-tab').forEach(btn => {
+      const secName = btn.dataset.sec;
+      if (!secName || secName === 'all') return;
+
+      btn.classList.remove('sec-has-present', 'sec-zero-finalized');
+      const cls = getSectionTabClass(secName);
+      if (cls) btn.classList.add(cls);
+    });
+  }
+
   /* -------- HTML Template -------- */
 
   function getHTML() {
@@ -104,12 +140,15 @@ const Attendance = (() => {
         </div>
       </div>
 
-      <!-- Section filter for employee list -->
+      <!-- Section & Category filter for employee list -->
       <div class="section-tabs" id="att-sec-tabs" style="margin-bottom:8px">
-        <button class="sec-tab active" data-sec="all">All</button>
-        ${_state.sections.sort((a,b) => a.name.localeCompare(b.name)).map(s =>
-          `<button class="sec-tab" data-sec="${esc(s.name)}">${esc(s.name)}</button>`
-        ).join('')}
+        <button class="sec-tab ${_state.filterSec === 'all' ? 'active' : ''}" data-sec="all">All</button>
+        <button class="sec-tab ${_state.filterSec === '__foremen__' ? 'active' : ''} ${getSectionTabClass('__foremen__')}" data-sec="__foremen__">👷 Foremen</button>
+        ${_state.sections.sort((a,b) => a.name.localeCompare(b.name)).map(s => {
+          const cls = getSectionTabClass(s.name);
+          const activeCls = _state.filterSec === s.name ? 'active' : '';
+          return `<button class="sec-tab ${activeCls} ${cls}" data-sec="${esc(s.name)}">${esc(s.name)}</button>`;
+        }).join('')}
       </div>
 
       <!-- Full employee list -->
@@ -263,6 +302,7 @@ const Attendance = (() => {
     refreshCounter();
     refreshPresentChips();
     renderEmployeeList();
+    updateSectionTabs();
     updateStatusBar();
     updateFinalizeBtn();
   }
@@ -273,6 +313,7 @@ const Attendance = (() => {
     refreshCounter();
     refreshPresentChips();
     renderEmployeeList();
+    updateSectionTabs();
     updateStatusBar();
   }
 
@@ -310,13 +351,28 @@ const Attendance = (() => {
     });
   }
 
+  function renderDesigBadge(desig) {
+    if (!desig) return '';
+    const dLower = desig.toLowerCase().trim();
+    let cls = 'desig-default';
+    if (dLower.includes('foreman') || dLower.includes('foremen')) cls = 'desig-foreman';
+    else if (dLower.includes('main fitter')) cls = 'desig-main-fitter';
+    return `<span class="badge-desig ${cls}">${esc(desig)}</span>`;
+  }
+
   function renderEmployeeList() {
     const listEl = document.getElementById('att-emp-list');
     if (!listEl) return;
 
     const filtered = _state.employees.filter(emp => {
+      const desig = (emp.designation || '').toLowerCase().trim();
+      const isForeman = desig.includes('foreman') || desig.includes('foremen');
+
       if (_state.filterSec === 'all') return true;
-      return emp.section === _state.filterSec;
+      if (_state.filterSec === '__foremen__') return isForeman;
+
+      // Section selected: match section AND exclude Foremen
+      return emp.section === _state.filterSec && !isForeman;
     }).sort((a,b) => a.name.localeCompare(b.name));
 
     if (!filtered.length) {
@@ -326,11 +382,15 @@ const Attendance = (() => {
 
     listEl.innerHTML = filtered.map(emp => {
       const isPresent = _state.presentIds.has(emp.id);
+      const desigBadge = renderDesigBadge(emp.designation);
+      const secText = emp.section ? `<span style="opacity:0.8;">${esc(emp.section)}</span>` : '';
+      const subInfo = [desigBadge, secText].filter(Boolean).join(' · ');
+
       return `
         <div class="emp-row ${isPresent ? 'present' : ''}" data-id="${emp.id}">
           <div class="row-left">
             <div class="row-name">${esc(emp.name)}</div>
-            <div class="row-sec">${[emp.designation, emp.section].filter(Boolean).map(esc).join(' · ')}</div>
+            <div class="row-sec">${subInfo}</div>
           </div>
           <div class="row-status ${isPresent ? 'p' : 'a'}">${isPresent ? '✅ P' : '○ A'}</div>
         </div>

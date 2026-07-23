@@ -14,6 +14,7 @@ const Manpower = (() => {
   /* -------- Render -------- */
 
   async function render() {
+    await DB.employees.deduplicate();
     _employees    = await DB.employees.getAll();
     _sections     = await DB.sections.getAll();
     _customFields = await DB.customFields.getAll();
@@ -28,12 +29,13 @@ const Manpower = (() => {
 
   function getHTML() {
     return `
-      <div class="flex items-center justify-between mb-8">
+      <div class="flex items-center justify-between mb-8" style="flex-wrap:wrap;gap:8px">
         <div>
           <div class="screen-title">👥 Manpower</div>
           <div class="screen-sub">Manage your workforce</div>
         </div>
-        <div class="flex gap-8">
+        <div class="flex gap-8" style="flex-wrap:wrap">
+          <button class="btn btn-sm btn-primary" id="mp-sync-btn" title="Sync Manpower with Firebase" style="background:var(--accent);color:#070c18;font-weight:700">🔄 Sync</button>
           <button class="btn btn-sm btn-outline" id="mp-template-btn" title="Download Excel Format Template">📄 Format</button>
           <button class="btn btn-sm btn-outline" id="mp-import-btn" title="Import CSV/Excel">📂 Import</button>
           <button class="btn btn-sm btn-outline" id="mp-export-btn" title="Export CSV">💾 Export</button>
@@ -48,9 +50,10 @@ const Manpower = (() => {
 
       <!-- Section filter tabs -->
       <div class="section-tabs" id="mp-section-tabs">
-        <button class="sec-tab active" data-sec="all">All</button>
+        <button class="sec-tab ${_filterSection === 'all' ? 'active' : ''}" data-sec="all">All</button>
+        <button class="sec-tab ${_filterSection === '__foremen__' ? 'active' : ''}" data-sec="__foremen__">👷 Foremen</button>
         ${_sections.sort((a,b) => a.name.localeCompare(b.name)).map(s => `
-          <button class="sec-tab" data-sec="${escHtml(s.name)}">${escHtml(s.name)}</button>
+          <button class="sec-tab ${_filterSection === s.name ? 'active' : ''}" data-sec="${escHtml(s.name)}">${escHtml(s.name)}</button>
         `).join('')}
       </div>
 
@@ -68,6 +71,15 @@ const Manpower = (() => {
       <!-- Hidden file input for import -->
       <input type="file" id="mp-file-input" accept=".csv,.xlsx,.xls" style="display:none">
     `;
+  }
+
+  function renderDesigBadge(desig) {
+    if (!desig) return '';
+    const dLower = desig.toLowerCase().trim();
+    let cls = 'desig-default';
+    if (dLower.includes('foreman') || dLower.includes('foremen')) cls = 'desig-foreman';
+    else if (dLower.includes('main fitter')) cls = 'desig-main-fitter';
+    return `<span class="badge-desig ${cls}">${escHtml(desig)}</span>`;
   }
 
   function renderList() {
@@ -88,24 +100,42 @@ const Manpower = (() => {
       return;
     }
 
-    el.innerHTML = list.map(emp => `
-      <div class="emp-item" data-id="${emp.id}">
-        <div class="emp-avatar">${initials(emp.name)}</div>
-        <div class="emp-info">
-          <div class="emp-name">${escHtml(emp.name)}</div>
-          <div class="emp-meta">${[emp.designation, emp.section].filter(Boolean).map(escHtml).join(' · ')}${emp.employeeId ? ' · #' + escHtml(emp.employeeId) : ''}</div>
+    el.innerHTML = list.map(emp => {
+      const desigBadge = renderDesigBadge(emp.designation);
+      const secText = emp.section ? `<span style="opacity:0.8;">${escHtml(emp.section)}</span>` : '';
+      const idText  = emp.employeeId ? `<span style="opacity:0.7;">· #${escHtml(emp.employeeId)}</span>` : '';
+      const subInfo = [desigBadge, secText].filter(Boolean).join(' · ');
+
+      return `
+        <div class="emp-item" data-id="${emp.id}">
+          <div class="emp-avatar">${initials(emp.name)}</div>
+          <div class="emp-info">
+            <div class="emp-name">${escHtml(emp.name)}</div>
+            <div class="emp-meta">${subInfo} ${idText}</div>
+          </div>
+          <div class="emp-badge">
+            <button class="icon-btn" data-edit="${emp.id}" title="Edit">✏️</button>
+          </div>
         </div>
-        <div class="emp-badge">
-          <button class="icon-btn" data-edit="${emp.id}" title="Edit">✏️</button>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function _filtered() {
     return _employees
       .filter(emp => {
-        const secOk  = _filterSection === 'all' || emp.section === _filterSection;
+        const desig = (emp.designation || '').toLowerCase().trim();
+        const isForeman = desig.includes('foreman') || desig.includes('foremen');
+
+        let secOk = false;
+        if (_filterSection === 'all') {
+          secOk = true;
+        } else if (_filterSection === '__foremen__') {
+          secOk = isForeman;
+        } else {
+          secOk = emp.section === _filterSection && !isForeman;
+        }
+
         const srchOk = !_searchQuery ||
           emp.name.toLowerCase().includes(_searchQuery) ||
           (emp.employeeId || '').toLowerCase().includes(_searchQuery) ||
@@ -133,6 +163,21 @@ const Manpower = (() => {
 
     // FAB - add employee
     document.getElementById('mp-add-fab').addEventListener('click', showAddModal);
+
+    // Sync manpower button
+    document.getElementById('mp-sync-btn')?.addEventListener('click', async () => {
+      if (!Firebase.isConfigured()) {
+        App.toast('Set up Firebase first (Settings → Firebase Sync)', 'warning');
+        return;
+      }
+      App.toast('🔄 Syncing Manpower list...', 'info');
+      await Firebase.pushAllEmployees();
+      await Firebase.pullEmployees();
+      await DB.employees.deduplicate();
+      _employees = await DB.employees.getAll();
+      renderList();
+      App.toast(`✅ Manpower synced! (${_employees.length} unique employees)`, 'success');
+    });
 
     // Template format download button
     document.getElementById('mp-template-btn').addEventListener('click', downloadTemplate);

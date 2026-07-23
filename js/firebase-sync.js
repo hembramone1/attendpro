@@ -28,6 +28,14 @@ const Firebase = (() => {
      INIT
      ============================================= */
 
+  let _liveSyncInterval = null;
+  let _lastRemoteTs     = 0;
+  let _isLiveSyncActive = false;
+
+  /* =============================================
+     INIT & LIVE SYNC ENGINE
+     ============================================= */
+
   async function init() {
     const cfg = await _loadConfig();
     if (cfg && cfg.dbUrl) {
@@ -46,11 +54,59 @@ const Firebase = (() => {
       try { await DB.settings.set('firebase_config', str); } catch(e) {}
     }
     _updateStatusIndicator();
+
+    // Start Live Auto-Sync by default if configured and not explicitly disabled
+    const autoSync = await DB.settings.get('firebase_autosync');
+    if (autoSync !== false && autoSync !== 'false' && isConfigured()) {
+      startLiveSync();
+    }
   }
 
   function isConfigured() { return _initialized && !!_dbUrl; }
 
   function getDbUrl() { return _dbUrl || DEFAULT_DB_URL; }
+
+  function startLiveSync() {
+    stopLiveSync();
+    if (!isConfigured()) return;
+    _isLiveSyncActive = true;
+    _updateStatusIndicator();
+
+    // Poll immediately, then every 5 seconds for live real-time sync
+    _pollRemoteChanges();
+    _liveSyncInterval = setInterval(_pollRemoteChanges, 5000);
+  }
+
+  function stopLiveSync() {
+    _isLiveSyncActive = false;
+    if (_liveSyncInterval) {
+      clearInterval(_liveSyncInterval);
+      _liveSyncInterval = null;
+    }
+    _updateStatusIndicator();
+  }
+
+  function isLiveSyncActive() {
+    return _isLiveSyncActive;
+  }
+
+  async function _pollRemoteChanges() {
+    if (!isConfigured() || _syncing) return;
+    try {
+      const remoteTs = await _get('meta/lastSync');
+      if (remoteTs && remoteTs > _lastRemoteTs) {
+        _lastRemoteTs = remoteTs;
+        // Background poll pulls active jobs and attendance records automatically
+        const jCount = await pullJobs();
+        const aCount = await pullAttendance();
+        if ((jCount > 0 || aCount > 0) && window.App && typeof App.refreshCurrentScreen === 'function') {
+          App.refreshCurrentScreen();
+        }
+      }
+    } catch(e) {
+      // Ignore background network blips
+    }
+  }
 
   async function _loadConfig() {
     try {
@@ -106,9 +162,11 @@ const Firebase = (() => {
     _apiKey = apiKey;
     _initialized = true;
     _updateStatusIndicator();
+    startLiveSync();
   }
 
   async function disconnect() {
+    stopLiveSync();
     localStorage.removeItem('firebase_config');
     localStorage.setItem('firebase_config_deleted', 'true');
     await DB.settings.set('firebase_config', '');
@@ -199,10 +257,11 @@ const Firebase = (() => {
     try { await _delete(`employees/${_sanitizeKey(empId)}`); } catch(e) {}
   }
 
-  // Upload all local employees to Firebase
+  // Upload all local employees to Firebase — uses PUT on /employees to purge remote server duplicates!
   async function pushAllEmployees() {
     if (!isConfigured()) return false;
     try {
+      await DB.employees.deduplicate();
       const employees = await DB.employees.getAll();
       const sections  = await DB.sections.getAll();
       const empMap = {};
@@ -210,7 +269,11 @@ const Firebase = (() => {
       const secMap = {};
       sections.forEach(s => { secMap[_sanitizeKey(s.id)] = { ...s, _syncedAt: Date.now() }; });
 
-      await _patch('', { employees: empMap, sections: secMap, 'meta/lastSync': Date.now() });
+      // Overwrite /employees and /sections completely to purge duplicate keys on Firebase server
+      await _put('employees', empMap);
+      await _put('sections', secMap);
+      await _put('meta/lastSync', Date.now());
+
       await DB.settings.set('firebase_last_sync', Date.now());
       return true;
     } catch(e) {
@@ -227,6 +290,7 @@ const Firebase = (() => {
 
     const remoteEmps = Object.values(data);
     const result = await DB.employees.import(remoteEmps);
+    await DB.employees.deduplicate();
 
     // Also pull sections
     const secData = await _get('sections').catch(() => null);
@@ -333,7 +397,7 @@ const Firebase = (() => {
     if (_autoSyncTimer) clearTimeout(_autoSyncTimer);
     _autoSyncTimer = setTimeout(() => {
       syncAll(true).catch(() => {}); // silent sync
-    }, 800);
+    }, 600);
   }
 
   /* =============================================
@@ -373,20 +437,36 @@ const Firebase = (() => {
   }
 
   // Pull everything Firebase → local (merge)
-  async function pullAll() {
-    if (!isConfigured()) { App.toast('Set up Firebase first', 'warning'); return; }
+  async function pullAll(silent = false) {
+    if (!isConfigured()) {
+      if (!silent) App.toast('Set up Firebase first', 'warning');
+      return { empAdded: 0, jobsCount: 0, attCount: 0 };
+    }
 
-    App.toast('📥 Pulling from Firebase…', 'info');
+    if (!silent) App.toast('📥 Pulling from Firebase…', 'info');
     try {
       const empResult = await pullEmployees();
+      const jobsCount = await pullJobs();
       const attCount  = await pullAttendance();
-      App.toast(
-        `✅ Pulled ${empResult.added} employees and ${attCount} attendance records`,
-        'success'
-      );
+
+      const totalUpdated = (empResult.added || 0) + (jobsCount || 0) + (attCount || 0);
+
+      if (!silent) {
+        App.toast(
+          `✅ Synced from Firebase (${empResult.added} new employees, ${jobsCount} jobs, ${attCount} attendance records)`,
+          'success'
+        );
+      }
+
+      if (totalUpdated > 0 && window.App && typeof App.refreshCurrentScreen === 'function') {
+        App.refreshCurrentScreen();
+      }
+
       _refreshSettingsIfOpen();
+      return { empAdded: empResult.added, jobsCount, attCount };
     } catch(e) {
-      App.toast('Pull failed: ' + e.message, 'error');
+      if (!silent) App.toast('Pull failed: ' + e.message, 'error');
+      return { empAdded: 0, jobsCount: 0, attCount: 0 };
     }
   }
 
@@ -400,10 +480,16 @@ const Firebase = (() => {
     if (!dot) return;
     if (_syncing) {
       dot.textContent = '🔄'; dot.style.opacity = '1';
+      dot.title = 'Firebase Syncing...';
+    } else if (_isLiveSyncActive) {
+      dot.textContent = '🟢'; dot.style.opacity = '1';
+      dot.title = 'Firebase Live Auto-Sync Active (Real-time)';
     } else if (isConfigured()) {
       dot.textContent = '🔥'; dot.style.opacity = '1';
+      dot.title = 'Firebase Connected';
     } else {
       dot.textContent = '🔥'; dot.style.opacity = '0.3';
+      dot.title = 'Firebase Not Connected';
     }
   }
 
@@ -449,6 +535,7 @@ const Firebase = (() => {
 
   return {
     init, configure, disconnect, isConfigured, getDbUrl,
+    startLiveSync, stopLiveSync, isLiveSyncActive,
     pushEmployee, deleteEmployee, pushAllEmployees, pullEmployees,
     pushAttendance, pullAttendance,
     pushJob, deleteJob, pullJobs, triggerAutoPush,

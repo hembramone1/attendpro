@@ -564,5 +564,13 @@ const App = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 
-  return { navigate, toast, modal, closeModal, confirm };
+  function refreshCurrentScreen() {
+    _renderScreen(_currentScreen);
+  }
+
+  function getCurrentScreen() {
+    return _currentScreen;
+  }
+
+  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm };
 })();

@@ -315,11 +315,11 @@ const Settings = (() => {
             </div>
             <div class="settings-row">
               <div class="settings-row-left">
-                <div class="settings-row-label">⚡ Auto-push on submit</div>
-                <div class="settings-row-desc">Push attendance record when finalized</div>
+                <div class="settings-row-label">🟢 Live Auto-Sync (Real-time)</div>
+                <div class="settings-row-desc">Automatically push local updates &amp; pull remote changes continuously</div>
               </div>
-              <label class="toggle-switch" title="Firebase auto-push">
-                <input type="checkbox" id="firebase-autopush-toggle">
+              <label class="toggle-switch" title="Firebase Live Auto-Sync">
+                <input type="checkbox" id="firebase-autosync-toggle" checked>
                 <span class="toggle-track"><span class="toggle-thumb"></span></span>
               </label>
             </div>
@@ -576,15 +576,21 @@ const Settings = (() => {
     document.getElementById('firebase-pull-btn')
       ?.addEventListener('click', () => Firebase.pullAll());
 
-    // Auto-push toggle
-    const fbAutoToggle = document.getElementById('firebase-autopush-toggle');
-    if (fbAutoToggle) {
-      DB.settings.get('firebase_autopush').then(val => {
-        fbAutoToggle.checked = val !== false && val !== 'false';
+    // Live Auto-Sync toggle
+    const fbAutoSyncToggle = document.getElementById('firebase-autosync-toggle');
+    if (fbAutoSyncToggle) {
+      DB.settings.get('firebase_autosync').then(val => {
+        fbAutoSyncToggle.checked = val !== false && val !== 'false';
       });
-      fbAutoToggle.addEventListener('change', async () => {
-        await DB.settings.set('firebase_autopush', fbAutoToggle.checked);
-        App.toast(`Firebase auto-push ${fbAutoToggle.checked ? 'enabled' : 'disabled'}`, 'info', 2000);
+      fbAutoSyncToggle.addEventListener('change', async () => {
+        await DB.settings.set('firebase_autosync', fbAutoSyncToggle.checked);
+        if (fbAutoSyncToggle.checked) {
+          Firebase.startLiveSync();
+          App.toast('🟢 Live Auto-Sync enabled (Real-time)', 'success', 2000);
+        } else {
+          Firebase.stopLiveSync();
+          App.toast('Live Auto-Sync disabled', 'info', 2000);
+        }
       });
     }
   }
