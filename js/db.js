@@ -279,14 +279,17 @@ const DB = (() => {
     getAll() { return p(store('jobs').getAll()); },
     get(id) { return p(store('jobs').get(id)); },
     async add(data) {
+      const assignedEmps = data.assignedEmps || [];
+      const hasEmps = assignedEmps.length > 0;
+
       const job = {
         id: uid(),
         title: (data.title || '').trim(),
         section: (data.section || 'General').trim(),
         description: (data.description || '').trim(),
-        assignedEmps: data.assignedEmps || [], // Array of { empId, name, section }
-        status: 'active', // 'active' | 'completed'
-        startTime: data.startTime || Date.now(),
+        assignedEmps,
+        status: hasEmps ? 'active' : 'pending', // 'pending' | 'active' | 'completed'
+        startTime: hasEmps ? (data.startTime || Date.now()) : null,
         endTime: null,
         durationMs: null,
         completionNotes: '',
@@ -294,17 +297,31 @@ const DB = (() => {
         createdAt: Date.now()
       };
       if (!job.title) throw new Error('Job title is required');
-      if (!job.assignedEmps.length) throw new Error('Assign at least one manpower');
       await p(store('jobs', 'readwrite').put(job));
       return job;
     },
-    async complete(id, notes = '') {
+    async complete(id, notes = '', customEndTime = null) {
       const job = await jobs.get(id);
       if (!job) throw new Error('Job not found');
       job.status = 'completed';
-      job.endTime = Date.now();
-      job.durationMs = Math.max(0, job.endTime - job.startTime);
+      job.endTime = customEndTime || Date.now();
+      job.durationMs = Math.max(0, job.endTime - (job.startTime || job.createdAt));
       job.completionNotes = notes.trim();
+      job.updatedAt = Date.now();
+      await p(store('jobs', 'readwrite').put(job));
+      return job;
+    },
+    async assignManpower(id, assignedEmps) {
+      const job = await jobs.get(id);
+      if (!job) throw new Error('Job not found');
+      job.assignedEmps = assignedEmps || [];
+      if (job.assignedEmps.length > 0) {
+        job.status = 'active';
+        if (!job.startTime) job.startTime = Date.now(); // Start timer when manpower assigned!
+      } else {
+        job.status = 'pending';
+        job.startTime = null;
+      }
       job.updatedAt = Date.now();
       await p(store('jobs', 'readwrite').put(job));
       return job;

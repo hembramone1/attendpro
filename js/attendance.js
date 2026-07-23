@@ -20,41 +20,51 @@ const Attendance = (() => {
   /* -------- Render -------- */
 
   async function render() {
-    const today = new Date();
-    _state.date    = toYMD(today);
-    _state.company = Settings.getCompany();
-    _state.employees = await DB.employees.getAll();
-    _state.sections  = await DB.sections.getAll();
-    _state.presentIds = new Set();
-    _state.filterSec  = 'all';
+    try {
+      const today = new Date();
+      _state.date    = toYMD(today);
+      _state.company = Settings.getCompany();
+      _state.employees = (await DB.employees.getAll()) || [];
+      _state.sections  = (await DB.sections.getAll()) || [];
+      _state.presentIds = new Set();
+      _state.filterSec  = 'all';
 
-    _state.existingRecord = await DB.attendance.getByKey(_state.date, _state.shift, _state.company);
-    if (_state.existingRecord) {
-      _state.isFinalized = _state.existingRecord.isFinalized;
-      _state.existingRecord.records
-        .filter(r => r.status === 'present')
-        .forEach(r => _state.presentIds.add(r.empId));
-    } else {
-      _state.isFinalized = false;
+      _state.existingRecord = await DB.attendance.getByKey(_state.date, _state.shift, _state.company);
+      if (_state.existingRecord) {
+        _state.isFinalized = !!_state.existingRecord.isFinalized;
+        (_state.existingRecord.records || [])
+          .filter(r => r && r.status === 'present')
+          .forEach(r => _state.presentIds.add(r.empId));
+      } else {
+        _state.isFinalized = false;
+      }
+
+      const screen = document.getElementById('screen-attendance');
+      if (!screen) return;
+      screen.innerHTML = getHTML();
+      setupEvents();
+      refreshCounter();
+      renderEmployeeList();
+      refreshPresentChips();
+    } catch(err) {
+      console.error('Error rendering Attendance screen:', err);
+      const screen = document.getElementById('screen-attendance');
+      if (screen) {
+        screen.innerHTML = `<div style="padding:30px;text-align:center;color:var(--danger)">⚠️ Error loading Attendance: ${esc(err.message)}</div>`;
+      }
     }
-
-    const screen = document.getElementById('screen-attendance');
-    screen.innerHTML = getHTML();
-    setupEvents();
-    refreshCounter();
-    renderEmployeeList();
-    refreshPresentChips();
   }
 
   function getSectionPresentCount(secName) {
     const isForemenTab = secName === '__foremen__';
     const secEmps = (_state.employees || []).filter(emp => {
+      if (!emp) return false;
       const desig = (emp.designation || '').toLowerCase().trim();
       const isF = desig.includes('foreman') || desig.includes('foremen');
       if (isForemenTab) return isF;
-      return emp.section === secName && !isF;
+      return (emp.section || '') === secName && !isF;
     });
-    return secEmps.filter(e => _state.presentIds && _state.presentIds.has(e.id)).length;
+    return secEmps.filter(e => e && _state.presentIds && _state.presentIds.has(e.id)).length;
   }
 
   function getSectionTabClass(secName) {
@@ -85,12 +95,12 @@ const Attendance = (() => {
   /* -------- HTML Template -------- */
 
   function getHTML() {
-    const shiftKeys = Settings.getShiftKeys();
-    const total = _state.employees.length;
+    const shiftKeys = Settings.getShiftKeys() || ['General'];
+    const total = (_state.employees || []).length;
 
     return `
       <div class="screen-title">✅ Attendance</div>
-      <div class="screen-sub">${Settings.getCompany()}</div>
+      <div class="screen-sub">${esc(Settings.getCompany())}</div>
 
       <!-- Controls: Date + Shift -->
       <div class="att-controls">
@@ -144,7 +154,7 @@ const Attendance = (() => {
       <div class="section-tabs" id="att-sec-tabs" style="margin-bottom:8px">
         <button class="sec-tab ${_state.filterSec === 'all' ? 'active' : ''}" data-sec="all">All</button>
         <button class="sec-tab ${_state.filterSec === '__foremen__' ? 'active' : ''} ${getSectionTabClass('__foremen__')}" data-sec="__foremen__">👷 Foremen</button>
-        ${_state.sections.sort((a,b) => a.name.localeCompare(b.name)).map(s => {
+        ${(_state.sections || []).filter(s => s && s.name).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(s => {
           const cls = getSectionTabClass(s.name);
           const activeCls = _state.filterSec === s.name ? 'active' : '';
           return `<button class="sec-tab ${activeCls} ${cls}" data-sec="${esc(s.name)}">${esc(s.name)}</button>`;
