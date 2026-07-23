@@ -593,12 +593,11 @@ a { color: inherit; }
    SECTION TABS
 ======================== */
 .section-tabs {
-  display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; scrollbar-width: none;
+  display: flex; flex-wrap: wrap; gap: 8px 6px; padding-bottom: 4px; margin-bottom: 14px;
 }
-.section-tabs::-webkit-scrollbar { display: none; }
 
 .sec-tab {
-  flex-shrink: 0; padding: 5px 14px; border-radius: var(--radius-full);
+  flex-shrink: 0; padding: 6px 14px; border-radius: var(--radius-full);
   font-size: 12px; font-weight: 600; cursor: pointer;
   border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
   transition: var(--t); white-space: nowrap;

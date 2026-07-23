@@ -485,8 +485,12 @@ const Manpower = (() => {
     const cfNames    = _customFields.map(f => f.name);
     const allHeaders = [...stdHeaders, ...cfNames];
 
-    const sampleRow1 = ['Rajesh Kumar', 'EMP101', 'Dumper Operator', '9876543210', 'Auto-Electrical', ...cfNames.map(() => '')];
-    const sampleRow2 = ['Suresh Verma', 'EMP102', 'Fitter', '9876543211', 'Mechanical', ...cfNames.map(() => '')];
+    const sectionNames = _sections.map(s => s.name).filter(Boolean);
+    const sec1 = sectionNames[0] || 'Auto-Electrical';
+    const sec2 = sectionNames[1] || sectionNames[0] || 'Mechanical';
+
+    const sampleRow1 = ['Rajesh Kumar', 'EMP101', 'Dumper Operator', '9876543210', sec1, ...cfNames.map(() => '')];
+    const sampleRow2 = ['Suresh Verma', 'EMP102', 'Fitter', '9876543211', sec2, ...cfNames.map(() => '')];
 
     const data = [allHeaders, sampleRow1, sampleRow2];
 
@@ -494,10 +498,37 @@ const Manpower = (() => {
       const ws = XLSX.utils.aoa_to_sheet(data);
       // Auto width for columns
       ws['!cols'] = allHeaders.map(() => ({ wch: 18 }));
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Manpower Format");
+
+      // Add Section Data Validation (Dropdown) if sections exist
+      if (sectionNames.length > 0) {
+        const listFormula = '"' + sectionNames.join(',') + '"';
+        ws['!dataValidation'] = [
+          {
+            sqref: 'E2:E500', // Section column (Column E, rows 2 to 500)
+            type: 'list',
+            operator: 'equal',
+            formula1: listFormula,
+            allowBlank: true,
+            showErrorMessage: true,
+            errorTitle: 'Invalid Section',
+            error: 'Please select a valid section from the dropdown list.'
+          }
+        ];
+
+        // Also append a 2nd reference worksheet "Valid_Sections" listing all sections from Settings
+        const wsSec = XLSX.utils.aoa_to_sheet([
+          ['Configured Sections in Settings'],
+          ...sectionNames.map(name => [name])
+        ]);
+        wsSec['!cols'] = [{ wch: 30 }];
+        XLSX.utils.book_append_sheet(wb, wsSec, "Valid_Sections");
+      }
+
       XLSX.writeFile(wb, "Manpower_Data_Format.xlsx");
-      App.toast('Format template downloaded (.xlsx)', 'success');
+      App.toast('Format template downloaded (.xlsx with Section dropdown)', 'success');
     } else {
       const csv = data.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
       downloadFile(csv, "Manpower_Data_Format.csv", 'text/csv');
