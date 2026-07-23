@@ -76,10 +76,8 @@ const Jobs = (() => {
 
   /* -------- Active Jobs Render -------- */
 
-  /* -------- Active Jobs Render -------- */
-
   function renderActiveJobs(list) {
-    if (!list.length) {
+    if (!list || !list.length) {
       return `
         <div class="empty-state">
           <div class="empty-icon">🛠️</div>
@@ -91,7 +89,8 @@ const Jobs = (() => {
     }
 
     return list.map(job => {
-      const elapsed = formatDuration(Date.now() - job.startTime);
+      const startTime = job.startTime || job.createdAt || Date.now();
+      const elapsed = formatDuration(Date.now() - startTime);
       const isPending = !job.assignedEmps || job.assignedEmps.length === 0;
 
       const empsHTML = isPending ? `
@@ -101,11 +100,13 @@ const Jobs = (() => {
         </div>
       ` : `
         <div class="flex flex-wrap gap-8 items-center">
-          ${job.assignedEmps.map(e => `
-            <span class="p-chip" style="font-size:11px;padding:3px 8px">
-              👤 ${escHtml(e.name)} <span style="opacity:0.75;font-size:10px">(${escHtml(e.section || 'General')})</span>
-            </span>
-          `).join('')}
+          ${(job.assignedEmps || []).map(e => {
+            const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
+            const sec  = typeof e === 'string' ? 'General' : (e.section || 'General');
+            return `<span class="p-chip" style="font-size:11px;padding:3px 8px">
+              👤 ${escHtml(name)} <span style="opacity:0.75;font-size:10px">(${escHtml(sec)})</span>
+            </span>`;
+          }).join('')}
           <button class="btn-link" data-assign-job="${job.id}" style="font-size:11px;margin-left:4px;border:none;background:none;color:var(--accent);cursor:pointer">✏️ Edit</button>
         </div>
       `;
@@ -132,7 +133,7 @@ const Jobs = (() => {
           </div>
 
           <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px">
-            <span style="font-size:11px;color:var(--text-muted)">Started ${formatTime(job.startTime)}</span>
+            <span style="font-size:11px;color:var(--text-muted)">Started ${formatTime(startTime)}</span>
             <div class="flex gap-8">
               <button class="btn btn-sm btn-danger" data-cancel-job="${job.id}">Cancel</button>
               <button class="btn btn-sm btn-success" data-complete-job="${job.id}">✅ Complete Job</button>
@@ -141,10 +142,12 @@ const Jobs = (() => {
         </div>
       `;
     }).join('');
+  }
+
   /* -------- Pending Jobs Render -------- */
 
   function renderPendingJobs(list) {
-    if (!list.length) {
+    if (!list || !list.length) {
       return `
         <div class="empty-state">
           <div class="empty-icon">⏳</div>
@@ -190,7 +193,7 @@ const Jobs = (() => {
   /* -------- Completed Jobs History Render -------- */
 
   function renderCompletedJobs(list) {
-    if (!list.length) {
+    if (!list || !list.length) {
       return `
         <div class="empty-state">
           <div class="empty-icon">📜</div>
@@ -201,12 +204,14 @@ const Jobs = (() => {
     }
 
     return list.map(job => {
-      const duration = formatDuration(job.durationMs || (job.endTime - job.startTime));
-      const empsHTML = (job.assignedEmps || []).map(e => `
-        <span class="p-chip" style="font-size:11px;padding:3px 8px;background:var(--bg-elevated);border-color:var(--border-bright);color:var(--text-primary)">
-          👤 ${escHtml(e.name)} (${escHtml(e.section || 'General')})
-        </span>
-      `).join('');
+      const duration = formatDuration(job.durationMs || (job.endTime && job.startTime ? job.endTime - job.startTime : 0));
+      const empsHTML = (job.assignedEmps || []).map(e => {
+        const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
+        const sec  = typeof e === 'string' ? 'General' : (e.section || 'General');
+        return `<span class="p-chip" style="font-size:11px;padding:3px 8px;background:var(--bg-elevated);border-color:var(--border-bright);color:var(--text-primary)">
+          👤 ${escHtml(name)} (${escHtml(sec)})
+        </span>`;
+      }).join('');
 
       return `
         <div class="card mb-12">
@@ -234,7 +239,7 @@ const Jobs = (() => {
           </div>
 
           <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--text-muted)">
-            <span>📅 ${formatDate(job.startTime)} · ${formatTime(job.startTime)} ➔ ${formatTime(job.endTime)}</span>
+            <span>📅 ${formatDate(job.startTime || job.createdAt)} · ${formatTime(job.startTime || job.createdAt)} ➔ ${formatTime(job.endTime)}</span>
             <button class="btn-link" style="color:var(--danger);font-size:11px;border:none;background:none;cursor:pointer" data-delete-job="${job.id}">Delete Record</button>
           </div>
         </div>
@@ -305,7 +310,6 @@ const Jobs = (() => {
       DB.jobs.getAll()
     ]);
 
-    // Find all employees marked 'present' today across any shift
     const todayAtts = allAtt.filter(r => r.date === today);
     const presentEmpIds = new Set();
     todayAtts.forEach(att => {
@@ -314,16 +318,25 @@ const Jobs = (() => {
       });
     });
 
-    // Find employees currently busy in ACTIVE jobs
     const busyEmpIds = new Set();
     allJobs.filter(j => j.status === 'active').forEach(j => {
-      (j.assignedEmps || []).forEach(e => busyEmpIds.add(e.empId));
+      (j.assignedEmps || []).forEach(e => {
+        const id = typeof e === 'string' ? e : e.empId;
+        if (id) busyEmpIds.add(id);
+      });
     });
 
     const presentEmps = allEmps.filter(e => presentEmpIds.has(e.id));
     const isAttendanceTaken = presentEmpIds.size > 0;
     const poolEmps = isAttendanceTaken ? presentEmps : allEmps;
-    const freeEmps = poolEmps.filter(e => !busyEmpIds.has(e.id));
+    
+    // Exclude Foremen designation from job manpower pool
+    const nonForemanEmps = poolEmps.filter(e => {
+      const desig = (e.designation || '').toLowerCase().trim();
+      return !desig.includes('foreman') && !desig.includes('foremen');
+    });
+    
+    const freeEmps = nonForemanEmps.filter(e => !busyEmpIds.has(e.id));
 
     const sectionOptions = _sections.map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('');
 
@@ -355,7 +368,7 @@ const Jobs = (() => {
       <div class="form-group">
         <div class="flex items-center justify-between mb-8">
           <label class="form-label" style="margin-bottom:0">Assign Free Manpower <span style="font-weight:400;color:var(--text-secondary)">(Optional)</span></label>
-          <span style="font-size:11px;color:var(--text-secondary)" id="job-free-count">${freeEmps.length} free available</span>
+          <span style="font-size:11px;color:var(--text-secondary)" id="job-free-count"></span>
         </div>
 
         ${!isAttendanceTaken ? `
@@ -365,7 +378,7 @@ const Jobs = (() => {
         ` : ''}
 
         <div id="job-manpower-container">
-          <!-- Filtered free manpower checkbox list -->
+          <!-- Filtered section free manpower checkbox list -->
         </div>
       </div>
     `;
@@ -409,30 +422,44 @@ const Jobs = (() => {
       }
     });
 
-    // Dynamically filter manpower checkbox list by selected section
-    function renderManpowerList(selectedSection) {
+    // Dynamically filter manpower checkbox list strictly by selected section (excluding Foremen)
+    function renderManpowerList(selectedSection, showAllSections = false) {
       const container = document.getElementById('job-manpower-container');
       const countEl   = document.getElementById('job-free-count');
       if (!container) return;
 
       let filteredEmps = freeEmps;
-      if (selectedSection && selectedSection !== 'General') {
-        filteredEmps = freeEmps.filter(e =>
-          e.section === selectedSection ||
-          (e.designation || '').toLowerCase().includes('foreman')
-        );
+      const isSpecificSection = selectedSection && selectedSection !== 'General';
+
+      if (isSpecificSection && !showAllSections) {
+        filteredEmps = freeEmps.filter(e => (e.section || '').trim() === selectedSection.trim());
       }
 
       if (countEl) {
-        countEl.textContent = `${filteredEmps.length} free in ${selectedSection || 'General'}`;
+        countEl.innerHTML = isSpecificSection ? `
+          <span style="color:var(--accent);font-weight:600">${filteredEmps.length} present & free in ${escHtml(selectedSection)}</span>
+          <a href="#" id="toggle-all-sec" style="font-size:11px;margin-left:6px;color:var(--text-secondary)">(${showAllSections ? 'Show ' + escHtml(selectedSection) + ' only' : 'Show all sections'})</a>
+        ` : `${filteredEmps.length} free available`;
       }
+
+      document.getElementById('toggle-all-sec')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        renderManpowerList(selectedSection, !showAllSections);
+      });
 
       if (!filteredEmps.length) {
         container.innerHTML = `
           <div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center;background:var(--bg-elevated);border-radius:var(--radius-md);border:1px dashed var(--border)">
-            No free present manpower in ${escHtml(selectedSection)}. You can create the job now and assign manpower later.
+            No present free manpower in <strong>${escHtml(selectedSection)}</strong>.
+            <div style="margin-top:6px;font-size:11px">
+              <a href="#" id="empty-toggle-all" style="color:var(--accent)">Click to view free manpower from other sections</a> or create the job now and assign manpower later.
+            </div>
           </div>
         `;
+        document.getElementById('empty-toggle-all')?.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          renderManpowerList(selectedSection, true);
+        });
         return;
       }
 
@@ -485,44 +512,47 @@ const Jobs = (() => {
     // Busy in OTHER active jobs
     const busyEmpIds = new Set();
     allJobs.filter(j => j.status === 'active' && j.id !== jobId).forEach(j => {
-      (j.assignedEmps || []).forEach(e => busyEmpIds.add(e.empId));
+      (j.assignedEmps || []).forEach(e => {
+        const id = typeof e === 'string' ? e : e.empId;
+        if (id) busyEmpIds.add(id);
+      });
     });
 
     const isAttendanceTaken = presentEmpIds.size > 0;
     const poolEmps = isAttendanceTaken ? allEmps.filter(e => presentEmpIds.has(e.id)) : allEmps;
-    const freeEmps = poolEmps.filter(e => !busyEmpIds.has(e.id));
-    const currentlyAssignedIds = new Set((job.assignedEmps || []).map(e => e.empId));
+
+    // Exclude Foremen designation from job manpower pool
+    const nonForemanEmps = poolEmps.filter(e => {
+      const desig = (e.designation || '').toLowerCase().trim();
+      return !desig.includes('foreman') && !desig.includes('foremen');
+    });
+    
+    const freeEmps = nonForemanEmps.filter(e => !busyEmpIds.has(e.id));
+    const currentlyAssignedIds = new Set((job.assignedEmps || []).map(e => typeof e === 'string' ? e : e.empId));
+
+    const isSpecificSection = job.section && job.section !== 'General';
 
     const formHTML = `
       <div style="margin-bottom:12px;background:var(--bg-elevated);padding:10px 12px;border-radius:var(--radius-md)">
         <div style="font-size:14px;font-weight:800;color:var(--text-primary)">${escHtml(job.title)}</div>
-        <div style="font-size:12px;color:var(--text-secondary)">Section: ${escHtml(job.section)}</div>
+        <div style="font-size:12px;color:var(--text-secondary)">Section: <strong>${escHtml(job.section)}</strong></div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Select Manpower to Assign</label>
-        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border-bright);border-radius:var(--radius-md);padding:8px">
-          ${freeEmps.map(emp => {
-            const isChecked = currentlyAssignedIds.has(emp.id) ? 'checked' : '';
-            return `
-              <label class="flex items-center gap-10" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--border)">
-                <input type="checkbox" class="assign-emp-checkbox" value="${emp.id}" data-name="${escHtml(emp.name)}" data-section="${escHtml(emp.section || 'General')}" ${isChecked}>
-                <div>
-                  <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${escHtml(emp.name)}</div>
-                  <div style="font-size:11px;color:var(--text-secondary)">${escHtml(emp.designation || 'Worker')} · ${escHtml(emp.section || 'General')}</div>
-                </div>
-              </label>
-            `;
-          }).join('')}
+        <div class="flex items-center justify-between mb-8">
+          <label class="form-label" style="margin-bottom:0">Select Present Free Manpower</label>
+          <span style="font-size:11px;color:var(--text-secondary)" id="assign-free-count"></span>
         </div>
+
+        <div id="assign-manpower-container"></div>
       </div>
     `;
 
     App.modal({
       title: '➕ Assign Manpower',
-      subtitle: 'Select available free manpower for this job',
+      subtitle: `Select free manpower for ${escHtml(job.title)}`,
       html: formHTML,
-      confirmText: 'Save Manpower',
+      confirmText: 'Save & Start Job',
       onConfirm: async () => {
         const checkboxes = document.querySelectorAll('.assign-emp-checkbox:checked');
         const assignedEmps = Array.from(checkboxes).map(cb => ({
@@ -549,6 +579,67 @@ const Jobs = (() => {
         }
       }
     });
+
+    function renderAssignList(showAllSections = false) {
+      const container = document.getElementById('assign-manpower-container');
+      const countEl   = document.getElementById('assign-free-count');
+      if (!container) return;
+
+      let filteredEmps = freeEmps;
+      if (isSpecificSection && !showAllSections) {
+        filteredEmps = freeEmps.filter(e =>
+          (e.section || '').trim() === job.section.trim() ||
+          currentlyAssignedIds.has(e.id)
+        );
+      }
+
+      if (countEl) {
+        countEl.innerHTML = isSpecificSection ? `
+          <span style="color:var(--accent);font-weight:600">${filteredEmps.length} free in ${escHtml(job.section)}</span>
+          <a href="#" id="assign-toggle-sec" style="font-size:11px;margin-left:6px;color:var(--text-secondary)">(${showAllSections ? 'Show ' + escHtml(job.section) + ' only' : 'Show all sections'})</a>
+        ` : `${filteredEmps.length} free available`;
+      }
+
+      document.getElementById('assign-toggle-sec')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        renderAssignList(!showAllSections);
+      });
+
+      if (!filteredEmps.length) {
+        container.innerHTML = `
+          <div style="font-size:12px;color:var(--text-secondary);padding:14px;text-align:center;background:var(--bg-elevated);border-radius:var(--radius-md);border:1px dashed var(--border)">
+            No present free manpower in <strong>${escHtml(job.section)}</strong>.
+            <div style="margin-top:6px;font-size:11px">
+              <a href="#" id="assign-empty-toggle" style="color:var(--accent)">Click to view free manpower from other sections</a>.
+            </div>
+          </div>
+        `;
+        document.getElementById('assign-empty-toggle')?.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          renderAssignList(true);
+        });
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border-bright);border-radius:var(--radius-md);padding:8px">
+          ${filteredEmps.map(emp => {
+            const isChecked = currentlyAssignedIds.has(emp.id) ? 'checked' : '';
+            return `
+              <label class="flex items-center gap-10" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--border)">
+                <input type="checkbox" class="assign-emp-checkbox" value="${emp.id}" data-name="${escHtml(emp.name)}" data-section="${escHtml(emp.section || 'General')}" ${isChecked}>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${escHtml(emp.name)}</div>
+                  <div style="font-size:11px;color:var(--text-secondary)">${escHtml(emp.designation || 'Worker')} · ${escHtml(emp.section || 'General')}</div>
+                </div>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    setTimeout(() => { renderAssignList(false); }, 100);
   }
 
   /* -------- Complete Job Modal -------- */
