@@ -857,7 +857,7 @@ a { color: inherit; }
 ======================== */
 @media (min-width: 640px) {
   .stats-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   .att-controls {
     grid-template-columns: 1fr 1fr;

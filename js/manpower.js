@@ -204,6 +204,7 @@ const Manpower = (() => {
       onDelete: () => {
         App.confirm(`Delete ${emp.name}? This cannot be undone.`, async () => {
           await DB.employees.delete(emp.id);
+          Firebase.triggerAutoPush();
           _employees = _employees.filter(e => e.id !== emp.id);
           renderList();
           App.toast(`${emp.name} deleted`, 'info');
@@ -217,6 +218,7 @@ const Manpower = (() => {
           if (data.section) await DB.sections.ensure(data.section);
           Object.assign(emp, data);
           await DB.employees.update(emp);
+          Firebase.triggerAutoPush();
           renderList();
           App.closeModal();
           App.toast('Changes saved', 'success');

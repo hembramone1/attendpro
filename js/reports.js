@@ -7,6 +7,7 @@
 const Reports = (() => {
   let _allRecords  = [];
   let _employees   = [];
+  let _allJobs     = [];
   let _calYear     = new Date().getFullYear();
   let _calMonth    = new Date().getMonth();
   let _selectedDate = null;
@@ -15,8 +16,14 @@ const Reports = (() => {
   /* -------- Render Screen -------- */
 
   async function render() {
-    _allRecords = await DB.attendance.getAll();
-    _employees  = await DB.employees.getAll();
+    const [recs, emps, jobs] = await Promise.all([
+      DB.attendance.getAll(),
+      DB.employees.getAll(),
+      DB.jobs.getAll()
+    ]);
+    _allRecords = recs;
+    _employees  = emps;
+    _allJobs    = jobs;
 
     const screen = document.getElementById('screen-reports');
     screen.innerHTML = getHTML();
@@ -29,7 +36,7 @@ const Reports = (() => {
       <div class="flex items-center justify-between mb-8">
         <div>
           <div class="screen-title">📊 Reports</div>
-          <div class="screen-sub">Attendance history & exports</div>
+          <div class="screen-sub">Attendance &amp; Job history</div>
         </div>
         <button class="btn btn-sm btn-outline" id="rpt-export-excel">⬇️ Excel</button>
       </div>
@@ -61,8 +68,11 @@ const Reports = (() => {
     // Header
     let html = days.map(d => `<div class="cal-cell hd">${d}</div>`).join('');
 
-    // Get dates with records
-    const datesWithData = new Set(_allRecords.map(r => r.date));
+    // Get dates with records (attendance OR jobs)
+    const datesWithData = new Set([
+      ..._allRecords.map(r => r.date),
+      ..._allJobs.map(j => j.date)
+    ]);
     const today = toYMD(new Date());
 
     const firstDay = new Date(_calYear, _calMonth, 1).getDay();
@@ -108,7 +118,18 @@ const Reports = (() => {
     const records = _allRecords.filter(r => r.date === date);
 
     if (!records.length) {
-      detail.innerHTML = `<div class="card mt-12"><div class="empty-state" style="padding:24px"><div class="empty-icon" style="font-size:32px">📋</div><div class="empty-title">No attendance for ${fmtDate(date)}</div></div></div>`;
+      // Check if there are jobs even if attendance was not taken
+      const dateJobs = _allJobs.filter(j => j.date === date || (j.startTime && toYMD(new Date(j.startTime)) === date));
+      
+      detail.innerHTML = `
+        <div class="card mt-12 mb-12">
+          <div class="empty-state" style="padding:16px">
+            <div class="empty-icon" style="font-size:28px">📋</div>
+            <div class="empty-title">No attendance taken for ${fmtDate(date)}</div>
+          </div>
+        </div>
+        ${renderJobsReportHTML(dateJobs)}
+      `;
       return;
     }
 
@@ -200,6 +221,8 @@ const Reports = (() => {
       `;
     }).join('');
 
+    const dateJobs = _allJobs.filter(j => j.date === _selectedDate || (j.startTime && toYMD(new Date(j.startTime)) === _selectedDate));
+
     body.innerHTML = `
       <div class="card mb-12" style="display:flex;gap:16px;justify-content:space-around">
         <div class="text-center"><div style="font-size:28px;font-weight:900;color:var(--success)">${present.length}</div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">Present</div></div>
@@ -208,8 +231,65 @@ const Reports = (() => {
         <div style="width:1px;background:var(--border)"></div>
         <div class="text-center"><div style="font-size:28px;font-weight:900;color:var(--text-primary)">${rec.records.length}</div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">Total</div></div>
       </div>
-      <div class="sec-label">Section-wise Report — ${rec.shift} Shift</div>
+      <div class="sec-label">Section-wise Attendance — ${rec.shift} Shift</div>
       ${sectionHTML || `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">No present employees recorded</div>`}
+
+      ${renderJobsReportHTML(dateJobs)}
+    `;
+  }
+
+  /* -------- Helper to Render Jobs Report HTML -------- */
+
+  function renderJobsReportHTML(dateJobs) {
+    if (!dateJobs || !dateJobs.length) {
+      return `<div class="sec-label mt-16">🛠️ Jobs &amp; Work Performed</div><div class="card mb-12 text-center" style="padding:14px;color:var(--text-muted);font-size:13px">No jobs recorded for this date</div>`;
+    }
+
+    const jobsHTML = dateJobs.map(job => {
+      const isCompleted = job.status === 'completed';
+      const startStr = job.startTime ? fmtTime(job.startTime) : 'N/A';
+      const endStr = job.endTime ? fmtTime(job.endTime) : (isCompleted ? 'Finished' : 'In Progress');
+      const durStr = formatDuration(job.durationMs || (isCompleted ? 0 : (Date.now() - job.startTime)));
+
+      const empsHTML = (job.assignedEmps || []).map(e => `
+        <span class="p-chip" style="font-size:11px;padding:3px 8px">👤 ${esc(e.name)} <span style="opacity:0.75;font-size:10px">(${esc(e.section || 'General')})</span></span>
+      `).join('');
+
+      return `
+        <div class="card mb-12" style="border-left:4px solid ${isCompleted ? 'var(--success)' : 'var(--accent)'};padding:14px">
+          <div class="flex items-center justify-between mb-8">
+            <div>
+              <span class="chip ${isCompleted ? 'chip-success' : 'chip-accent'}" style="font-size:10px">${esc(job.section)}</span>
+              <div style="font-size:15px;font-weight:800;color:var(--text-primary);margin-top:4px">${esc(job.title)}</div>
+            </div>
+            <div class="chip ${isCompleted ? 'chip-success' : 'chip-warning'}" style="font-size:11px">
+              ${isCompleted ? '✅ Finished' : '⚡ Active'}
+            </div>
+          </div>
+
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap;background:var(--bg-elevated);padding:8px 10px;border-radius:var(--radius-sm)">
+            <span>⏰ <strong>Start:</strong> ${startStr}</span>
+            <span>🏁 <strong>Finish:</strong> ${endStr}</span>
+            <span>⏱️ <strong>Duration:</strong> ${durStr}</span>
+          </div>
+
+          ${job.completionNotes ? `
+            <div style="font-size:12px;color:var(--text-primary);margin-bottom:10px;background:var(--bg-card);padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border-bright)">
+              <strong>📝 Work Done Summary:</strong> ${esc(job.completionNotes)}
+            </div>
+          ` : (job.description ? `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px"><strong>Description:</strong> ${esc(job.description)}</div>` : '')}
+
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase">👥 Engaged Manpower (${(job.assignedEmps || []).length})</div>
+            <div class="flex flex-wrap gap-8">${empsHTML}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="sec-label mt-16">🛠️ Jobs &amp; Work Performed (${dateJobs.length})</div>
+      ${jobsHTML}
     `;
   }
 
@@ -470,6 +550,20 @@ const Reports = (() => {
 
   function esc(str) {
     return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtTime(ts) {
+    if (!ts) return '--:--';
+    return new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+
+  function formatDuration(ms) {
+    if (!ms || ms < 0) return '0m';
+    const totalSec = Math.floor(ms / 1000);
+    const hrs  = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m`;
   }
 
   return { render, generateAndShare, exportExcel };

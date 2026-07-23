@@ -141,7 +141,11 @@ const App = (() => {
     const today   = toYMD(new Date());
     const now     = new Date();
 
-    const [allEmps, allAtt] = await Promise.all([DB.employees.getAll(), DB.attendance.getAll()]);
+    const [allEmps, allAtt, allJobs] = await Promise.all([
+      DB.employees.getAll(),
+      DB.attendance.getAll(),
+      DB.jobs.getAll()
+    ]);
 
     // Today's records (all shifts)
     const todayRecs = allAtt.filter(r => r.date === today);
@@ -151,6 +155,23 @@ const App = (() => {
     const totalPresent = presentToday.size;
     const totalEmps    = allEmps.length;
     const totalAbsent  = totalEmps - totalPresent;
+
+    // Active Jobs & Manpower Engagement
+    const activeJobs = allJobs.filter(j => j.status === 'active');
+    const engagedEmpMap = new Map(); // empId -> jobTitle
+    activeJobs.forEach(j => {
+      (j.assignedEmps || []).forEach(e => {
+        if (presentToday.size === 0 || presentToday.has(e.empId)) {
+          engagedEmpMap.set(e.empId, j.title);
+        }
+      });
+    });
+
+    const engagedCount = engagedEmpMap.size;
+    const freeCount    = Math.max(0, totalPresent - engagedCount);
+
+    // Section names
+    const sectionNames = [...new Set(allEmps.map(e => e.section || 'Unassigned'))].sort((a,b) => a.localeCompare(b));
 
     // Last 7 days attendance data
     const last7 = [];
@@ -166,6 +187,65 @@ const App = (() => {
 
     const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening';
     const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Completed Jobs
+    const completedJobs = allJobs.filter(j => j.status === 'completed').sort((a,b) => (b.endTime||0) - (a.endTime||0));
+
+    // Ongoing jobs HTML list
+    const ongoingJobsHTML = activeJobs.length ? activeJobs.map(job => {
+      const elapsed = formatDuration(Date.now() - job.startTime);
+      const empsHTML = (job.assignedEmps || []).slice(0, 4).map(e => `
+        <span class="p-chip" style="font-size:10px;padding:2px 6px">👤 ${esc(e.name)}</span>
+      `).join('') + ((job.assignedEmps || []).length > 4 ? `<span class="p-chip" style="font-size:10px;padding:2px 6px">+${job.assignedEmps.length - 4} more</span>` : '');
+
+      return `
+        <div class="card mb-8" style="border-left:4px solid var(--accent);padding:12px 14px">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <span class="chip chip-accent" style="font-size:10px;padding:1px 6px">${esc(job.section)}</span>
+              <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${esc(job.title)}</div>
+            </div>
+            <div class="chip chip-warning" id="dash-job-timer-${job.id}" style="font-family:monospace;font-size:11px">
+              ⏱️ ${elapsed}
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-8" style="margin-top:8px">${empsHTML}</div>
+        </div>
+      `;
+    }).join('') : `
+      <div class="card mb-12 text-center" style="padding:16px">
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">No ongoing jobs right now</div>
+        <button class="btn btn-sm btn-outline" id="dash-create-first-job-btn">+ Start New Job</button>
+      </div>
+    `;
+
+    // Completed jobs HTML list
+    const completedJobsHTML = completedJobs.length ? completedJobs.slice(0, 4).map(job => {
+      const duration = formatDuration(job.durationMs || ((job.endTime||Date.now()) - job.startTime));
+      const empsHTML = (job.assignedEmps || []).slice(0, 4).map(e => `
+        <span class="p-chip" style="font-size:10px;padding:2px 6px;background:var(--bg-elevated);border-color:var(--border-bright);color:var(--text-primary)">👤 ${esc(e.name)}</span>
+      `).join('') + ((job.assignedEmps || []).length > 4 ? `<span class="p-chip" style="font-size:10px;padding:2px 6px">+${job.assignedEmps.length - 4} more</span>` : '');
+
+      return `
+        <div class="card mb-8" style="padding:12px 14px">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <span class="chip chip-default" style="font-size:10px;padding:1px 6px">${esc(job.section)}</span>
+              <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${esc(job.title)}</div>
+            </div>
+            <div class="chip chip-success" style="font-size:11px">
+              ⏱️ Took ${duration}
+            </div>
+          </div>
+          ${job.completionNotes ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px"><strong>Done:</strong> ${esc(job.completionNotes)}</div>` : ''}
+          <div class="flex flex-wrap gap-8" style="margin-top:8px">${empsHTML}</div>
+        </div>
+      `;
+    }).join('') : `
+      <div class="card mb-12 text-center" style="padding:16px">
+        <div style="font-size:13px;color:var(--text-secondary)">No completed jobs yet</div>
+      </div>
+    `;
 
     // Today's shift status
     const shiftStatus = Settings.getShiftKeys().map(shift => {
@@ -185,36 +265,47 @@ const App = (() => {
         <div class="hero-date">${dateStr}</div>
         <div class="hero-actions">
           <button class="btn btn-primary" id="dash-take-att-btn">✅ Take Attendance</button>
-          <button class="btn btn-secondary" id="dash-reports-btn">📊 Reports</button>
+          <button class="btn btn-secondary" id="dash-jobs-btn">🛠️ Manage Jobs</button>
         </div>
       </div>
 
-      <!-- Stats -->
-      <div class="stats-grid">
-        <div class="stat-card accent">
-          <div class="stat-icon">👥</div>
-          <div class="stat-value">${totalEmps}</div>
-          <div class="stat-label">Total Manpower</div>
-          <div class="stat-glow"></div>
-        </div>
-        <div class="stat-card success">
-          <div class="stat-icon">✅</div>
-          <div class="stat-value">${totalPresent}</div>
-          <div class="stat-label">Present Today</div>
-          <div class="stat-glow"></div>
-        </div>
-        <div class="stat-card danger">
-          <div class="stat-icon">❌</div>
-          <div class="stat-value">${totalAbsent}</div>
-          <div class="stat-label">Absent Today</div>
-          <div class="stat-glow"></div>
-        </div>
-        <div class="stat-card indigo">
+      <!-- Combined Interactive Stats Grid -->
+      <div class="stats-grid" style="grid-template-columns:repeat(3, 1fr)">
+        <div class="stat-card success card-hover" id="stat-card-attendance" title="Click for section-wise attendance breakdown">
           <div class="stat-icon">📋</div>
-          <div class="stat-value">${allAtt.length}</div>
-          <div class="stat-label">Total Records</div>
+          <div class="stat-value" style="font-size:24px">${totalPresent} <span style="font-size:14px;color:var(--text-secondary);font-weight:600">/ ${totalEmps}</span></div>
+          <div class="stat-label">Present Status</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Tap details 🔍</div>
           <div class="stat-glow"></div>
         </div>
+
+        <div class="stat-card warning card-hover" id="stat-card-engaged" style="border-color:var(--warning-border)" title="Click for section-wise engaged manpower breakdown">
+          <div class="stat-icon">🛠️</div>
+          <div class="stat-value" style="color:var(--warning);font-size:24px">${engagedCount}</div>
+          <div class="stat-label">Engaged Manpower</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Tap details 🔍</div>
+          <div class="stat-glow" style="background:var(--warning)"></div>
+        </div>
+
+        <div class="stat-card indigo card-hover" id="stat-card-free" title="Click for section-wise free manpower breakdown">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-value" style="color:var(--accent);font-size:24px">${freeCount}</div>
+          <div class="stat-label">Free Manpower</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Tap details 🔍</div>
+          <div class="stat-glow"></div>
+        </div>
+      </div>
+
+      <!-- Jobs Section with Ongoing / Completed Tabs -->
+      <div class="flex items-center justify-between mb-8">
+        <div class="section-tabs" id="dash-jobs-tab-switch" style="margin-bottom:0;padding-bottom:0">
+          <button class="sec-tab active" data-dash-tab="ongoing">⚡ Ongoing (${activeJobs.length})</button>
+          <button class="sec-tab" data-dash-tab="completed">📜 Completed (${completedJobs.length})</button>
+        </div>
+        <button class="btn-link" id="dash-view-all-jobs-btn" style="font-size:12px;color:var(--accent);border:none;background:none;cursor:pointer">View All ➔</button>
+      </div>
+      <div id="dash-jobs-container" class="mb-16">
+        ${ongoingJobsHTML}
       </div>
 
       <!-- Today's shift status -->
@@ -241,8 +332,119 @@ const App = (() => {
       </div>
     `;
 
-    document.getElementById('dash-take-att-btn').addEventListener('click', () => navigate('attendance'));
-    document.getElementById('dash-reports-btn').addEventListener('click', () => navigate('reports'));
+    document.getElementById('dash-take-att-btn')?.addEventListener('click', () => navigate('attendance'));
+    document.getElementById('dash-jobs-btn')?.addEventListener('click', () => navigate('jobs'));
+    document.getElementById('dash-view-all-jobs-btn')?.addEventListener('click', () => navigate('jobs'));
+    document.getElementById('dash-create-first-job-btn')?.addEventListener('click', () => navigate('jobs'));
+
+    // Dashboard Jobs tab switcher (Ongoing vs Completed)
+    document.getElementById('dash-jobs-tab-switch')?.addEventListener('click', e => {
+      const btn = e.target.closest('.sec-tab');
+      if (!btn) return;
+      const tab = btn.dataset.dashTab;
+      document.querySelectorAll('#dash-jobs-tab-switch .sec-tab').forEach(b => b.classList.toggle('active', b === btn));
+      const container = document.getElementById('dash-jobs-container');
+      if (container) {
+        container.innerHTML = tab === 'ongoing' ? ongoingJobsHTML : completedJobsHTML;
+      }
+    });
+
+    /* -------- Card 1: Attendance Breakdown Modal -------- */
+    document.getElementById('stat-card-attendance')?.addEventListener('click', () => {
+      const attSectionHTML = sectionNames.map(sec => {
+        const empsInSec = allEmps.filter(e => (e.section || 'Unassigned') === sec);
+        const presentInSec = empsInSec.filter(e => presentToday.has(e.id));
+        const absentInSec  = empsInSec.filter(e => !presentToday.has(e.id));
+
+        return `
+          <div style="margin-bottom:12px;background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px">
+            <div class="flex items-center justify-between mb-8">
+              <div style="font-weight:800;font-size:13px;color:var(--accent)">${esc(sec)}</div>
+              <div style="font-size:12px;font-weight:700">
+                <span style="color:var(--success)">${presentInSec.length} Present</span> / ${empsInSec.length} Total
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">Present (${presentInSec.length}):</div>
+            <div class="flex flex-wrap gap-8 mb-8">
+              ${presentInSec.length ? presentInSec.map(e => `<span class="p-chip" style="font-size:10px">✅ ${esc(e.name)}</span>`).join('') : '<span style="font-size:11px;color:var(--text-muted)">None</span>'}
+            </div>
+            ${absentInSec.length ? `
+              <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px">Absent (${absentInSec.length}):</div>
+              <div class="flex flex-wrap gap-8">
+                ${absentInSec.map(e => `<span class="p-chip" style="font-size:10px;background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)">❌ ${esc(e.name)}</span>`).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      modal({
+        title: '📋 Attendance Breakdown',
+        subtitle: `Total ${totalPresent} Present out of ${totalEmps} Manpower`,
+        html: attSectionHTML || '<div style="text-align:center;padding:16px;color:var(--text-muted)">No manpower registered yet</div>'
+      });
+    });
+
+    /* -------- Card 2: Engaged Manpower Breakdown Modal -------- */
+    document.getElementById('stat-card-engaged')?.addEventListener('click', () => {
+      const engagedSectionHTML = sectionNames.map(sec => {
+        const empsInSec = allEmps.filter(e => (e.section || 'Unassigned') === sec);
+        const engagedInSec = empsInSec.filter(e => engagedEmpMap.has(e.id));
+        if (!engagedInSec.length) return '';
+
+        return `
+          <div style="margin-bottom:12px;background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px">
+            <div class="flex items-center justify-between mb-8">
+              <div style="font-weight:800;font-size:13px;color:var(--warning)">${esc(sec)}</div>
+              <div class="chip chip-warning" style="font-size:11px">${engagedInSec.length} Engaged</div>
+            </div>
+            <div class="flex flex-col gap-8">
+              ${engagedInSec.map(e => `
+                <div style="font-size:12px;background:var(--bg-card);padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border-bright);display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-weight:600">👤 ${esc(e.name)} <span style="font-size:10px;color:var(--text-secondary)">(${esc(e.designation||'Worker')})</span></span>
+                  <span class="chip chip-accent" style="font-size:10px">🛠️ ${esc(engagedEmpMap.get(e.id))}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted)">No workers currently engaged in jobs</div>';
+
+      modal({
+        title: '🛠️ Engaged Manpower Breakdown',
+        subtitle: `${engagedCount} workers currently active on tasks`,
+        html: engagedSectionHTML
+      });
+    });
+
+    /* -------- Card 3: Free Manpower Breakdown Modal -------- */
+    document.getElementById('stat-card-free')?.addEventListener('click', () => {
+      const freeSectionHTML = sectionNames.map(sec => {
+        const empsInSec = allEmps.filter(e => (e.section || 'Unassigned') === sec);
+        const freeInSec = empsInSec.filter(e => (presentToday.size === 0 || presentToday.has(e.id)) && !engagedEmpMap.has(e.id));
+        if (!freeInSec.length) return '';
+
+        return `
+          <div style="margin-bottom:12px;background:var(--bg-elevated);border-radius:var(--radius-md);padding:12px">
+            <div class="flex items-center justify-between mb-8">
+              <div style="font-weight:800;font-size:13px;color:var(--accent)">${esc(sec)}</div>
+              <div class="chip chip-success" style="font-size:11px">${freeInSec.length} Free Available</div>
+            </div>
+            <div class="flex flex-wrap gap-8">
+              ${freeInSec.map(e => `
+                <span class="p-chip" style="font-size:11px;padding:4px 8px">⚡ ${esc(e.name)} <span style="opacity:0.7;font-size:10px">(${esc(e.designation||'Worker')})</span></span>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('') || '<div style="padding:24px;text-align:center;color:var(--text-muted)">No free manpower available right now</div>';
+
+      modal({
+        title: '⚡ Free Manpower Breakdown',
+        subtitle: `${freeCount} present workers free for task assignment`,
+        html: freeSectionHTML
+      });
+    });
   }
 
   /* -------- Helpers -------- */
@@ -253,6 +455,17 @@ const App = (() => {
 
   function esc(str) {
     return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function formatDuration(ms) {
+    if (!ms || ms < 0) return '0m';
+    const totalSec = Math.floor(ms / 1000);
+    const hrs  = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
   }
 
   /* -------- Init -------- */
@@ -307,12 +520,6 @@ const App = (() => {
       toast(`Theme set to ${currentTheme.charAt(0).toUpperCase() + currentTheme.slice(1)}`, 'success', 1500);
     });
 
-    // Init Google Drive sync (non-blocking — reads from localStorage)
-    await Drive.init();
-
-    // Init Firebase Realtime Database sync
-    await Firebase.init();
-
     // Setup navigation
     document.querySelectorAll('.nav-btn').forEach(btn => {
       btn.addEventListener('click', () => navigate(btn.dataset.screen));
@@ -341,17 +548,18 @@ const App = (() => {
     const urlParams = new URLSearchParams(window.location.search);
     const startScreen = urlParams.get('screen') || 'dashboard';
 
-    // Render first screen
+    // Render first screen IMMEDIATELY
     navigate(startScreen);
 
-    // Hide quick splash screen smoothly
-    setTimeout(() => {
-      const splash = document.getElementById('splash-screen');
-      if (splash) {
-        splash.classList.add('fade-out');
-        setTimeout(() => splash.remove(), 400);
-      }
-    }, 250);
+    // Remove splash screen immediately without artificial delays
+    const splash = document.getElementById('splash-screen');
+    if (splash) {
+      splash.classList.add('fade-out');
+      setTimeout(() => splash.remove(), 300);
+    }
+
+    // Init Drive & Firebase asynchronously in the background (non-blocking)
+    Promise.all([Drive.init(), Firebase.init()]).catch(() => {});
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -330,6 +330,7 @@ const Jobs = (() => {
           await DB.jobs.add({
             title, section, date, description: desc, assignedEmps
           });
+          Firebase.triggerAutoPush();
           App.toast('🛠️ Job started!', 'success');
           render();
           return true;
@@ -370,6 +371,7 @@ const Jobs = (() => {
         const notes = document.getElementById('job-complete-notes').value;
         try {
           await DB.jobs.complete(jobId, notes);
+          Firebase.triggerAutoPush();
           App.toast('✅ Job completed! Manpower is now free.', 'success');
           render();
           return true;

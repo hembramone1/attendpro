@@ -248,6 +248,7 @@ const Settings = (() => {
               <label class="form-label">Firebase Database URL <span style="color:var(--danger)">*</span></label>
               <input class="form-input" id="firebase-url-input"
                 placeholder="https://your-project-default-rtdb.firebaseio.com"
+                value="${esc(Firebase.getDbUrl() || '')}"
                 autocomplete="off" spellcheck="false" style="font-size:12px">
             </div>
 

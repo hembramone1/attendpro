@@ -22,27 +22,54 @@ const Firebase = (() => {
 
   const ROOT_PATH = 'attendpro';
 
+  const DEFAULT_DB_URL = 'https://attendpro-f29b6-default-rtdb.asia-southeast1.firebasedatabase.app';
+
   /* =============================================
      INIT
      ============================================= */
 
   async function init() {
     const cfg = await _loadConfig();
-    if (cfg) {
+    if (cfg && cfg.dbUrl) {
       _dbUrl  = cfg.dbUrl.replace(/\/$/, '');  // strip trailing slash
       _apiKey = cfg.apiKey || null;
       _initialized = true;
+    } else if (localStorage.getItem('firebase_config_deleted') !== 'true') {
+      // Default to user's Firebase URL unless explicitly deleted/disconnected!
+      _dbUrl  = DEFAULT_DB_URL;
+      _apiKey = null;
+      _initialized = true;
+      // Auto save so it persists everywhere across reloads
+      const defaultStored = { dbUrl: _dbUrl, apiKey: null };
+      const str = JSON.stringify(defaultStored);
+      localStorage.setItem('firebase_config', str);
+      try { await DB.settings.set('firebase_config', str); } catch(e) {}
     }
     _updateStatusIndicator();
   }
 
   function isConfigured() { return _initialized && !!_dbUrl; }
 
+  function getDbUrl() { return _dbUrl || DEFAULT_DB_URL; }
+
   async function _loadConfig() {
     try {
+      // 1. Try localStorage (fastest and immune to DB version resets)
+      const ls = localStorage.getItem('firebase_config');
+      if (ls) {
+        const parsed = JSON.parse(ls);
+        if (parsed && parsed.dbUrl) return parsed;
+      }
+      // 2. Try IndexedDB settings
       const raw = await DB.settings.get('firebase_config');
-      if (!raw) return null;
-      return typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (raw) {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed && parsed.dbUrl) {
+          localStorage.setItem('firebase_config', JSON.stringify(parsed));
+          return parsed;
+        }
+      }
+      return null;
     } catch(e) { return null; }
   }
 
@@ -68,9 +95,13 @@ const Firebase = (() => {
     // Test the connection before saving
     await _testConnection(dbUrl, apiKey);
 
-    // Save config
+    // Save config in BOTH localStorage and IndexedDB so it NEVER gets lost!
     const stored = { dbUrl, apiKey };
-    await DB.settings.set('firebase_config', JSON.stringify(stored));
+    const str = JSON.stringify(stored);
+    localStorage.setItem('firebase_config', str);
+    localStorage.removeItem('firebase_config_deleted');
+    await DB.settings.set('firebase_config', str);
+
     _dbUrl  = dbUrl;
     _apiKey = apiKey;
     _initialized = true;
@@ -78,6 +109,8 @@ const Firebase = (() => {
   }
 
   async function disconnect() {
+    localStorage.removeItem('firebase_config');
+    localStorage.setItem('firebase_config_deleted', 'true');
     await DB.settings.set('firebase_config', '');
     _dbUrl       = null;
     _apiKey      = null;
@@ -241,35 +274,96 @@ const Firebase = (() => {
   }
 
   /* =============================================
+     JOBS SYNC
+     ============================================= */
+
+  // Push one job record
+  async function pushJob(job) {
+    if (!isConfigured()) return false;
+    try {
+      const key = _sanitizeKey(job.id);
+      await _put(`jobs/${key}`, { ...job, _syncedAt: Date.now() });
+      await DB.settings.set('firebase_last_sync', Date.now());
+      return true;
+    } catch(e) {
+      console.error('[Firebase] pushJob:', e);
+      return false;
+    }
+  }
+
+  async function deleteJob(jobId) {
+    if (!isConfigured()) return;
+    try { await _delete(`jobs/${_sanitizeKey(jobId)}`); } catch(e) {}
+  }
+
+  async function pushAllJobs() {
+    if (!isConfigured()) return false;
+    try {
+      const jobs = await DB.jobs.getAll();
+      const jobMap = {};
+      jobs.forEach(j => { jobMap[_sanitizeKey(j.id)] = { ...j, _syncedAt: Date.now() }; });
+      await _patch('', { jobs: jobMap, 'meta/lastSync': Date.now() });
+      return true;
+    } catch(e) {
+      console.error('[Firebase] pushAllJobs:', e);
+      return false;
+    }
+  }
+
+  async function pullJobs() {
+    if (!isConfigured()) return 0;
+    const data = await _get('jobs');
+    if (!data) return 0;
+
+    let count = 0;
+    for (const job of Object.values(data)) {
+      await DB.jobs.save(job).catch(() => {});
+      count++;
+    }
+    return count;
+  }
+
+  /* =============================================
+     AUTO-PUSH TRIGGER (Debounced background push)
+     ============================================= */
+  let _autoSyncTimer = null;
+
+  function triggerAutoPush() {
+    if (!isConfigured()) return;
+    if (_autoSyncTimer) clearTimeout(_autoSyncTimer);
+    _autoSyncTimer = setTimeout(() => {
+      syncAll(true).catch(() => {}); // silent sync
+    }, 800);
+  }
+
+  /* =============================================
      FULL SYNC OPERATIONS
      ============================================= */
 
-  // Push everything local → Firebase
-  async function syncAll() {
+  // Push everything local → Firebase (silent = true omits toast popups for background auto-push)
+  async function syncAll(silent = false) {
     if (!isConfigured()) {
-      App.toast('Set up Firebase first (Settings → Firebase Sync)', 'warning');
+      if (!silent) App.toast('Set up Firebase first (Settings → Firebase Sync)', 'warning');
       return;
     }
-    if (_syncing) { App.toast('Sync already in progress…', 'info'); return; }
+    if (_syncing) return;
 
     _syncing = true;
     _updateStatusIndicator();
-    App.toast('🔥 Syncing to Firebase…', 'info');
+    if (!silent) App.toast('🔥 Syncing to Firebase…', 'info');
 
-    let ok = false;
     try {
-      // Push master data
+      // Push master data, jobs & finalized attendance
       await pushAllEmployees();
-      // Push all finalized attendance
+      await pushAllJobs();
       const allAtt = await DB.attendance.getAll();
       const finalized = allAtt.filter(r => r.isFinalized);
       for (const rec of finalized) await pushAttendance(rec);
 
       await DB.settings.set('firebase_last_sync', Date.now());
-      ok = true;
-      App.toast(`✅ Synced ${finalized.length} attendance records to Firebase`, 'success');
+      if (!silent) App.toast(`✅ Synced to Firebase`, 'success');
     } catch(e) {
-      App.toast('Firebase sync failed: ' + e.message, 'error');
+      if (!silent) App.toast('Firebase sync failed: ' + e.message, 'error');
       console.error('[Firebase] syncAll:', e);
     } finally {
       _syncing = false;
@@ -354,9 +448,10 @@ const Firebase = (() => {
   }
 
   return {
-    init, configure, disconnect, isConfigured,
+    init, configure, disconnect, isConfigured, getDbUrl,
     pushEmployee, deleteEmployee, pushAllEmployees, pullEmployees,
     pushAttendance, pullAttendance,
+    pushJob, deleteJob, pullJobs, triggerAutoPush,
     syncAll, pullAll,
     getLastSyncFormatted, getProjectId
   };
