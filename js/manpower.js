@@ -264,7 +264,15 @@ const Manpower = (() => {
       </div>
       <div class="form-group">
         <label class="form-label">Designation</label>
-        <input class="form-input" id="f-designation" placeholder="e.g. Mechanic, Electrician" value="${v('designation')}">
+        <input class="form-input" id="f-designation" list="designation-suggestions" placeholder="e.g. Foreman, Fitter, Welder" value="${v('designation')}">
+        <datalist id="designation-suggestions">
+          <option value="Foreman">
+          <option value="Main Fitter">
+          <option value="Fitter">
+          <option value="Helper">
+          <option value="Welder">
+          <option value="Office Staff">
+        </datalist>
       </div>
       <div class="form-group">
         <label class="form-label">Section</label>
@@ -480,60 +488,130 @@ const Manpower = (() => {
 
   /* -------- Download Format Template -------- */
 
-  function downloadTemplate() {
+  const DEFAULT_DESIGNATIONS = [
+    'Foreman',
+    'Main Fitter',
+    'Fitter',
+    'Helper',
+    'Welder',
+    'Office Staff'
+  ];
+
+  async function downloadTemplate() {
     const stdHeaders = ['Name', 'Employee ID', 'Designation', 'Phone', 'Section'];
     const cfNames    = _customFields.map(f => f.name);
     const allHeaders = [...stdHeaders, ...cfNames];
 
     const sectionNames = _sections.map(s => s.name).filter(Boolean);
+    if (!sectionNames.length) {
+      sectionNames.push('Auto-Electrical', 'Mechanical', 'General');
+    }
+
+    // Collect designations (defaults + any additional custom designations existing in manpower DB)
+    const existingDesigs = _employees.map(e => e.designation).filter(Boolean);
+    const designationSet = new Set([...DEFAULT_DESIGNATIONS, ...existingDesigs]);
+    const designationList = Array.from(designationSet);
+
     const sec1 = sectionNames[0] || 'Auto-Electrical';
     const sec2 = sectionNames[1] || sectionNames[0] || 'Mechanical';
 
-    const sampleRow1 = ['Rajesh Kumar', 'EMP101', 'Dumper Operator', '9876543210', sec1, ...cfNames.map(() => '')];
-    const sampleRow2 = ['Suresh Verma', 'EMP102', 'Fitter', '9876543211', sec2, ...cfNames.map(() => '')];
+    if (typeof ExcelJS !== 'undefined') {
+      try {
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Manpower Format');
 
-    const data = [allHeaders, sampleRow1, sampleRow2];
+        // Header Row
+        const headerRow = sheet.addRow(allHeaders);
+        headerRow.font = { bold: true, color: { argb: 'FF1E293B' } };
+        headerRow.height = 24;
+        headerRow.eachCell((cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE2E8F0' }
+          };
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        });
 
-    if (typeof XLSX !== 'undefined') {
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      // Auto width for columns
-      ws['!cols'] = allHeaders.map(() => ({ wch: 18 }));
+        // Sample Data Rows
+        const row1 = sheet.addRow(['Rajesh Kumar', 'EMP101', 'Foreman', '9876543210', sec1, ...cfNames.map(() => '')]);
+        const row2 = sheet.addRow(['Suresh Verma', 'EMP102', 'Fitter', '9876543211', sec2, ...cfNames.map(() => '')]);
+        row1.height = 20;
+        row2.height = 20;
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Manpower Format");
+        // Auto Column Widths
+        sheet.columns.forEach((col, idx) => {
+          col.width = Math.max(18, (allHeaders[idx] || '').length + 6);
+        });
 
-      // Add Section Data Validation (Dropdown) if sections exist
-      if (sectionNames.length > 0) {
-        const listFormula = '"' + sectionNames.join(',') + '"';
-        ws['!dataValidation'] = [
-          {
-            sqref: 'E2:E500', // Section column (Column E, rows 2 to 500)
+        // Create 2nd reference worksheet "Valid_Lists" with Sections & Designations
+        const listSheet = workbook.addWorksheet('Valid_Lists');
+        const listHeaderRow = listSheet.addRow(['Valid Sections', 'Valid Designations']);
+        listHeaderRow.font = { bold: true };
+        listHeaderRow.height = 22;
+
+        const maxRows = Math.max(sectionNames.length, designationList.length);
+        for (let i = 0; i < maxRows; i++) {
+          listSheet.addRow([
+            sectionNames[i] || '',
+            designationList[i] || ''
+          ]);
+        }
+        listSheet.getColumn(1).width = 30;
+        listSheet.getColumn(2).width = 30;
+
+        const secFormula = `Valid_Lists!$A$2:$A$${sectionNames.length + 1}`;
+        const desigFormula = `Valid_Lists!$B$2:$B$${designationList.length + 1}`;
+
+        // Apply Data Validation on Designation Column (Column 3 / C) and Section Column (Column 5 / E)
+        for (let r = 2; r <= 500; r++) {
+          // Column 3 (C): Designation
+          sheet.getCell(r, 3).dataValidation = {
             type: 'list',
-            operator: 'equal',
-            formula1: listFormula,
             allowBlank: true,
+            formulae: [desigFormula],
+            showErrorMessage: true,
+            errorTitle: 'Invalid Designation',
+            error: 'Please select a valid designation from the dropdown list.'
+          };
+
+          // Column 5 (E): Section
+          sheet.getCell(r, 5).dataValidation = {
+            type: 'list',
+            allowBlank: true,
+            formulae: [secFormula],
             showErrorMessage: true,
             errorTitle: 'Invalid Section',
             error: 'Please select a valid section from the dropdown list.'
-          }
-        ];
+          };
+        }
 
-        // Also append a 2nd reference worksheet "Valid_Sections" listing all sections from Settings
-        const wsSec = XLSX.utils.aoa_to_sheet([
-          ['Configured Sections in Settings'],
-          ...sectionNames.map(name => [name])
-        ]);
-        wsSec['!cols'] = [{ wch: 30 }];
-        XLSX.utils.book_append_sheet(wb, wsSec, "Valid_Sections");
+        // Export workbook to download
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Manpower_Data_Format.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        App.toast('Format template downloaded with Section & Designation dropdowns (.xlsx)', 'success');
+        return;
+      } catch(err) {
+        console.error('[ExcelJS Error]', err);
       }
-
-      XLSX.writeFile(wb, "Manpower_Data_Format.xlsx");
-      App.toast('Format template downloaded (.xlsx with Section dropdown)', 'success');
-    } else {
-      const csv = data.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-      downloadFile(csv, "Manpower_Data_Format.csv", 'text/csv');
-      App.toast('Format template downloaded (.csv)', 'success');
     }
+
+    // Fallback if ExcelJS is not loaded
+    const sampleRow1 = ['Rajesh Kumar', 'EMP101', 'Foreman', '9876543210', sec1, ...cfNames.map(() => '')];
+    const sampleRow2 = ['Suresh Verma', 'EMP102', 'Fitter', '9876543211', sec2, ...cfNames.map(() => '')];
+    const data = [allHeaders, sampleRow1, sampleRow2];
+    const csv = data.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    downloadFile(csv, "Manpower_Data_Format.csv", 'text/csv');
+    App.toast('Format template downloaded (.csv)', 'success');
   }
 
   /* -------- Helpers -------- */

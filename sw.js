@@ -2,7 +2,7 @@
    AttendPro Service Worker — Offline Support
    ============================================= */
 
-const CACHE_NAME = 'attendpro-v18';
+const CACHE_NAME = 'attendpro-v20';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,7 @@ const STATIC_ASSETS = [
 const CDN_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap',
   'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+  'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
 ];
 
