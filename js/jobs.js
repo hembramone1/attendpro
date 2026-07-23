@@ -74,6 +74,42 @@ const Jobs = (() => {
     `;
   }
 
+  /* -------- Sub-Tasks & Assisting Manpower Helper -------- */
+
+  function renderSubTasksHTML(job) {
+    if (!job.subTasks || !job.subTasks.length) return '';
+
+    return `
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+        <div class="sec-label" style="font-size:11px;color:var(--accent);margin-bottom:6px">
+          🤝 Assistance Tasks & Specialist Support (${job.subTasks.length})
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${job.subTasks.map(st => {
+            const emps = (st.assignedEmps || []).map(e => {
+              const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
+              const desig = typeof e === 'string' ? '' : (e.designation ? ` (${e.designation})` : '');
+              const sec   = typeof e === 'string' ? '' : (e.section ? ` · ${e.section}` : '');
+              return `<strong>${escHtml(name)}</strong>${escHtml(desig)}${escHtml(sec)}`;
+            }).join(', ');
+
+            return `
+              <div style="font-size:12px;background:var(--bg-elevated);border:1px solid var(--border-bright);padding:6px 10px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between">
+                <div>
+                  <span style="font-weight:700;color:var(--text-primary)">📌 ${escHtml(st.title)}</span>
+                  ${emps ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">Assisting: ${emps}</div>` : ''}
+                </div>
+                ${job.status !== 'completed' ? `
+                  <button class="btn-link" style="color:var(--danger);font-size:11px;border:none;background:none;cursor:pointer;padding:2px 4px" data-delete-subtask="${job.id}:${st.id}">🗑️</button>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   /* -------- Active Jobs Render -------- */
 
   function renderActiveJobs(list) {
@@ -103,8 +139,9 @@ const Jobs = (() => {
           ${(job.assignedEmps || []).map(e => {
             const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
             const sec  = typeof e === 'string' ? 'General' : (e.section || 'General');
+            const tag  = typeof e !== 'string' && e.isAssisting ? ` <span style="font-size:9px;background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px">Assisting</span>` : '';
             return `<span class="p-chip" style="font-size:11px;padding:3px 8px">
-              👤 ${escHtml(name)} <span style="opacity:0.75;font-size:10px">(${escHtml(sec)})</span>
+              👤 ${escHtml(name)} <span style="opacity:0.75;font-size:10px">(${escHtml(sec)})</span>${tag}
             </span>`;
           }).join('')}
           <button class="btn-link" data-assign-job="${job.id}" style="font-size:11px;margin-left:4px;border:none;background:none;color:var(--accent);cursor:pointer">✏️ Edit</button>
@@ -127,12 +164,20 @@ const Jobs = (() => {
 
           ${job.description ? `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5">${escHtml(job.description)}</div>` : ''}
 
-          <div style="margin-bottom:14px">
-            <div class="sec-label" style="font-size:10px;margin-bottom:6px">Assigned Manpower (${(job.assignedEmps || []).length})</div>
+          <div style="margin-bottom:12px">
+            <div class="sec-label" style="font-size:10px;margin-bottom:6px">Assigned Primary Manpower (${(job.assignedEmps || []).length})</div>
             ${empsHTML}
           </div>
 
-          <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px">
+          ${renderSubTasksHTML(job)}
+
+          <div style="margin-top:10px">
+            <button class="btn btn-sm btn-outline" data-add-assistance="${job.id}" style="width:100%;font-size:12px;border-style:dashed">
+              🤝 + Add Assistance Task & Specialist Manpower (Welder, Turner, Crane, Electrician…)
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:12px;margin-top:10px">
             <span style="font-size:11px;color:var(--text-muted)">Started ${formatTime(startTime)}</span>
             <div class="flex gap-8">
               <button class="btn btn-sm btn-danger" data-cancel-job="${job.id}">Cancel</button>
@@ -181,6 +226,8 @@ const Jobs = (() => {
             </button>
           </div>
 
+          ${renderSubTasksHTML(job)}
+
           <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--text-muted)">
             <span>Created ${formatDate(job.createdAt || Date.now())}</span>
             <button class="btn-link" style="color:var(--danger);font-size:11px;border:none;background:none;cursor:pointer" data-cancel-job="${job.id}">Delete Pending Job</button>
@@ -208,8 +255,9 @@ const Jobs = (() => {
       const empsHTML = (job.assignedEmps || []).map(e => {
         const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
         const sec  = typeof e === 'string' ? 'General' : (e.section || 'General');
+        const tag  = typeof e !== 'string' && e.isAssisting ? ` <span style="font-size:9px;background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px">Assisting</span>` : '';
         return `<span class="p-chip" style="font-size:11px;padding:3px 8px;background:var(--bg-elevated);border-color:var(--border-bright);color:var(--text-primary)">
-          👤 ${escHtml(name)} (${escHtml(sec)})
+          👤 ${escHtml(name)} (${escHtml(sec)})${tag}
         </span>`;
       }).join('');
 
@@ -238,7 +286,9 @@ const Jobs = (() => {
             <div class="flex flex-wrap gap-8">${empsHTML || '<span style="font-size:12px;color:var(--text-secondary)">No manpower assigned</span>'}</div>
           </div>
 
-          <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--text-muted)">
+          ${renderSubTasksHTML(job)}
+
+          <div class="flex items-center justify-between" style="border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--text-muted);margin-top:8px">
             <span>📅 ${formatDate(job.startTime || job.createdAt)} · ${formatTime(job.startTime || job.createdAt)} ➔ ${formatTime(job.endTime)}</span>
             <button class="btn-link" style="color:var(--danger);font-size:11px;border:none;background:none;cursor:pointer" data-delete-job="${job.id}">Delete Record</button>
           </div>
@@ -261,13 +311,31 @@ const Jobs = (() => {
       render();
     });
 
-    // Delegated actions for Complete & Cancel & Delete & Assign
+    // Delegated actions for Complete & Cancel & Delete & Assign & Assistance Sub-tasks
     const listEl = document.getElementById('jobs-content-list');
     if (listEl) {
       listEl.addEventListener('click', async e => {
         const assignBtn = e.target.closest('[data-assign-job]');
         if (assignBtn) {
           showAssignManpowerModal(assignBtn.dataset.assignJob);
+          return;
+        }
+
+        const assistBtn = e.target.closest('[data-add-assistance]');
+        if (assistBtn) {
+          showAddAssistanceModal(assistBtn.dataset.addAssistance);
+          return;
+        }
+
+        const deleteSubBtn = e.target.closest('[data-delete-subtask]');
+        if (deleteSubBtn) {
+          const [jId, sId] = deleteSubBtn.dataset.deleteSubtask.split(':');
+          App.confirm('Remove this assistance sub-task?', async () => {
+            await DB.jobs.deleteSubTask(jId, sId);
+            Firebase.triggerAutoPush();
+            App.toast('Assistance sub-task removed', 'info');
+            render();
+          });
           return;
         }
 
@@ -298,6 +366,178 @@ const Jobs = (() => {
         }
       });
     }
+  }
+
+  /* -------- Add Assistance Task & Specialist Manpower Modal -------- */
+
+  async function showAddAssistanceModal(jobId) {
+    const job = await DB.jobs.get(jobId);
+    if (!job) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const [allAtt, allEmps, allJobs] = await Promise.all([
+      DB.attendance.getAll(),
+      DB.employees.getAll(),
+      DB.jobs.getAll()
+    ]);
+
+    const todayAtts = allAtt.filter(r => r.date === today);
+    const presentEmpIds = new Set();
+    todayAtts.forEach(att => {
+      (att.records || []).forEach(r => {
+        if (r.status === 'present') presentEmpIds.add(r.empId);
+      });
+    });
+
+    const busyEmpIds = new Set();
+    allJobs.filter(j => j.status === 'active' && j.id !== jobId).forEach(j => {
+      (j.assignedEmps || []).forEach(e => {
+        const id = typeof e === 'string' ? e : e.empId;
+        if (id) busyEmpIds.add(id);
+      });
+    });
+
+    const isAttendanceTaken = presentEmpIds.size > 0;
+    const poolEmps = isAttendanceTaken ? allEmps.filter(e => presentEmpIds.has(e.id)) : allEmps;
+
+    // Exclude Foremen designation from job manpower pool
+    const nonForemanEmps = poolEmps.filter(e => {
+      const desig = (e.designation || '').toLowerCase().trim();
+      return !desig.includes('foreman') && !desig.includes('foremen');
+    });
+
+    const freeEmps = nonForemanEmps.filter(e => !busyEmpIds.has(e.id));
+
+    const formHTML = `
+      <div style="margin-bottom:12px;background:var(--bg-elevated);padding:10px 12px;border-radius:var(--radius-md)">
+        <div style="font-size:14px;font-weight:800;color:var(--text-primary)">${escHtml(job.title)}</div>
+        <div style="font-size:12px;color:var(--text-secondary)">Primary Section: <strong>${escHtml(job.section)}</strong></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Additional Task / Assistance Description <span style="color:var(--danger)">*</span></label>
+        <input class="form-input" id="assistance-title" placeholder="e.g. Bracket Welding Support, Crane Lifting, Electrical Repair">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" style="margin-bottom:6px">Filter Assisting Specialist Role</label>
+        <div class="flex flex-wrap gap-4 mb-8" id="specialist-filter-btns">
+          <button type="button" class="btn btn-xs btn-primary spec-btn" data-role="all">✨ All Free</button>
+          <button type="button" class="btn btn-xs btn-outline spec-btn" data-role="welder">👨‍🏭 Welder</button>
+          <button type="button" class="btn btn-xs btn-outline spec-btn" data-role="turner">🔧 Turner</button>
+          <button type="button" class="btn btn-xs btn-outline spec-btn" data-role="crane">🏗️ Crane Operator</button>
+          <button type="button" class="btn btn-xs btn-outline spec-btn" data-role="electrician">⚡ Auto-Electrician</button>
+        </div>
+
+        <div class="flex items-center justify-between mb-6">
+          <label class="form-label" style="margin-bottom:0">Select Assisting Specialist Manpower</label>
+          <span style="font-size:11px;color:var(--text-secondary)" id="assistance-count"></span>
+        </div>
+
+        <div id="assistance-manpower-container"></div>
+      </div>
+    `;
+
+    App.modal({
+      title: '🤝 Add Assistance & Specialist Manpower',
+      subtitle: 'Engage assisting manpower from Welder, Turner, Crane, Electrician etc.',
+      html: formHTML,
+      confirmText: 'Engage Assisting Manpower',
+      onConfirm: async () => {
+        const title = document.getElementById('assistance-title').value.trim();
+        if (!title) { App.toast('Please enter assistance task description', 'error'); return false; }
+
+        const checkboxes = document.querySelectorAll('.assistance-emp-checkbox:checked');
+        const assignedEmps = Array.from(checkboxes).map(cb => ({
+          empId: cb.value,
+          name: cb.dataset.name,
+          section: cb.dataset.section,
+          designation: cb.dataset.designation
+        }));
+
+        try {
+          await DB.jobs.addSubTask(jobId, { title, assignedEmps });
+          Firebase.triggerAutoPush();
+          _activeTab = 'active';
+          App.toast(`🤝 Assistance task "${title}" added with ${assignedEmps.length} assisting specialists!`, 'success');
+          render();
+          return true;
+        } catch(e) {
+          App.toast(e.message, 'error');
+          return false;
+        }
+      }
+    });
+
+    let _selectedRole = 'all';
+
+    function renderAssistanceList() {
+      const container = document.getElementById('assistance-manpower-container');
+      const countEl   = document.getElementById('assistance-count');
+      if (!container) return;
+
+      let filtered = freeEmps;
+      if (_selectedRole === 'welder') {
+        filtered = freeEmps.filter(e => (e.designation || '').toLowerCase().includes('welder'));
+      } else if (_selectedRole === 'turner') {
+        filtered = freeEmps.filter(e => (e.designation || '').toLowerCase().includes('turner'));
+      } else if (_selectedRole === 'crane') {
+        filtered = freeEmps.filter(e => (e.designation || '').toLowerCase().includes('crane') || (e.designation || '').toLowerCase().includes('operator'));
+      } else if (_selectedRole === 'electrician') {
+        filtered = freeEmps.filter(e => (e.designation || '').toLowerCase().includes('electrician') || (e.designation || '').toLowerCase().includes('auto-electr'));
+      }
+
+      if (countEl) {
+        countEl.textContent = `${filtered.length} present & free available`;
+      }
+
+      if (!filtered.length) {
+        container.innerHTML = `
+          <div style="font-size:12px;color:var(--text-secondary);padding:14px;text-align:center;background:var(--bg-elevated);border-radius:var(--radius-md);border:1px dashed var(--border)">
+            No present free manpower matching this specialist filter.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border-bright);border-radius:var(--radius-md);padding:8px">
+          ${filtered.map(emp => {
+            const desig = (emp.designation || '').toLowerCase();
+            let icon = '👤';
+            if (desig.includes('welder')) icon = '👨‍🏭';
+            else if (desig.includes('turner')) icon = '🔧';
+            else if (desig.includes('crane')) icon = '🏗️';
+            else if (desig.includes('electrician')) icon = '⚡';
+
+            return `
+              <label class="flex items-center gap-10" style="padding:6px 8px;cursor:pointer;border-bottom:1px solid var(--border)">
+                <input type="checkbox" class="assistance-emp-checkbox" value="${emp.id}" data-name="${escHtml(emp.name)}" data-section="${escHtml(emp.section || 'General')}" data-designation="${escHtml(emp.designation || 'Worker')}">
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${icon} ${escHtml(emp.name)}</div>
+                  <div style="font-size:11px;color:var(--text-secondary)">${escHtml(emp.designation || 'Worker')} · ${escHtml(emp.section || 'General')}</div>
+                </div>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    setTimeout(() => {
+      renderAssistanceList();
+
+      document.getElementById('specialist-filter-btns')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.spec-btn');
+        if (!btn) return;
+        _selectedRole = btn.dataset.role;
+        document.querySelectorAll('#specialist-filter-btns .spec-btn').forEach(b => {
+          b.classList.toggle('btn-primary', b === btn);
+          b.classList.toggle('btn-outline', b !== btn);
+        });
+        renderAssistanceList();
+      });
+    }, 100);
   }
 
   /* -------- Create Job Modal -------- */

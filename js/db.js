@@ -326,6 +326,54 @@ const DB = (() => {
       await p(store('jobs', 'readwrite').put(job));
       return job;
     },
+    async addSubTask(id, { title, assignedEmps }) {
+      const job = await jobs.get(id);
+      if (!job) throw new Error('Job not found');
+      if (!job.subTasks) job.subTasks = [];
+
+      const subTask = {
+        id: uid(),
+        title: (title || '').trim(),
+        assignedEmps: assignedEmps || [],
+        createdAt: Date.now()
+      };
+      job.subTasks.push(subTask);
+
+      // Merge assisting manpower into job.assignedEmps if not present
+      if (!job.assignedEmps) job.assignedEmps = [];
+      const existingIds = new Set(job.assignedEmps.map(e => typeof e === 'string' ? e : e.empId));
+
+      (assignedEmps || []).forEach(e => {
+        const empId = typeof e === 'string' ? e : e.empId;
+        if (empId && !existingIds.has(empId)) {
+          job.assignedEmps.push({
+            ...e,
+            isAssisting: true,
+            assistanceTask: (title || '').trim()
+          });
+          existingIds.add(empId);
+        }
+      });
+
+      if (job.status === 'pending' && job.assignedEmps.length > 0) {
+        job.status = 'active';
+        if (!job.startTime) job.startTime = Date.now();
+      }
+
+      job.updatedAt = Date.now();
+      await p(store('jobs', 'readwrite').put(job));
+      return job;
+    },
+    async deleteSubTask(jobId, subTaskId) {
+      const job = await jobs.get(jobId);
+      if (!job) throw new Error('Job not found');
+      if (job.subTasks) {
+        job.subTasks = job.subTasks.filter(st => st.id !== subTaskId);
+      }
+      job.updatedAt = Date.now();
+      await p(store('jobs', 'readwrite').put(job));
+      return job;
+    },
     async update(job) {
       job.updatedAt = Date.now();
       await p(store('jobs', 'readwrite').put(job));
