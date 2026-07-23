@@ -72,8 +72,8 @@ const Firebase = (() => {
     _isLiveSyncActive = true;
     _updateStatusIndicator();
 
-    // Poll immediately, then every 5 seconds for live real-time sync
-    _pollRemoteChanges();
+    // Initial silent pull on start, then poll every 5 seconds for live real-time sync across all devices
+    pullAll(true).catch(() => {});
     _liveSyncInterval = setInterval(_pollRemoteChanges, 5000);
   }
 
@@ -96,10 +96,13 @@ const Firebase = (() => {
       const remoteTs = await _get('meta/lastSync');
       if (remoteTs && remoteTs > _lastRemoteTs) {
         _lastRemoteTs = remoteTs;
-        // Background poll pulls active jobs and attendance records automatically
-        const jCount = await pullJobs();
-        const aCount = await pullAttendance();
-        if ((jCount > 0 || aCount > 0) && window.App && typeof App.refreshCurrentScreen === 'function') {
+        // Background poll pulls employees, active jobs and attendance records automatically
+        const empResult = await pullEmployees().catch(() => ({ added: 0 }));
+        const jCount    = await pullJobs().catch(() => 0);
+        const aCount    = await pullAttendance().catch(() => 0);
+
+        const totalNew  = (empResult?.added || 0) + (jCount || 0) + (aCount || 0);
+        if (totalNew > 0 && window.App && typeof App.refreshCurrentScreen === 'function') {
           App.refreshCurrentScreen();
         }
       }

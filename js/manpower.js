@@ -221,6 +221,7 @@ const Manpower = (() => {
           const emp = await DB.employees.add(data);
           _employees.push(emp);
           _sections = await DB.sections.getAll();
+          Firebase.triggerAutoPush();
           App.closeModal();
           App.toast(`${emp.name} added`, 'success');
           render(); // refresh whole screen to update tabs
@@ -425,8 +426,9 @@ const Manpower = (() => {
       }
 
       const result = await DB.employees.import(list);
+      await Firebase.pushAllEmployees();
       await render();
-      App.toast(`✅ Imported ${result.added} employees${result.errors.length ? ` (${result.errors.length} skipped)` : ''}`, 'success');
+      App.toast(`✅ Imported ${result.added} employees & synced to cloud!${result.errors.length ? ` (${result.errors.length} skipped)` : ''}`, 'success');
     } catch (e) {
       console.error(e);
       App.toast('Import failed: ' + e.message, 'error');
