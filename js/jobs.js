@@ -8,6 +8,7 @@ const Jobs = (() => {
   let _activeTab = 'active'; // 'active' | 'pending' | 'history'
   let _sections  = [];
   let _jobs      = [];
+  let _searchQuery = '';
   let _timerId   = null;
 
   /* -------- Render -------- */
@@ -39,9 +40,24 @@ const Jobs = (() => {
 
   function getHTML() {
     const allJobs = _jobs || [];
-    const activeJobs    = allJobs.filter(j => j && j.status === 'active' && Array.isArray(j.assignedEmps) && j.assignedEmps.length > 0);
-    const pendingJobs   = allJobs.filter(j => j && (j.status === 'pending' || (j.status === 'active' && (!j.assignedEmps || j.assignedEmps.length === 0))));
-    const completedJobs = allJobs.filter(j => j && j.status === 'completed').sort((a,b) => (b.endTime || 0) - (a.endTime || 0));
+    const q = (_searchQuery || '').toLowerCase().trim();
+
+    const matchesQuery = (j) => {
+      if (!q) return true;
+      if ((j.title || '').toLowerCase().includes(q)) return true;
+      if ((j.section || '').toLowerCase().includes(q)) return true;
+      if ((j.description || '').toLowerCase().includes(q)) return true;
+      if ((j.completionNotes || '').toLowerCase().includes(q)) return true;
+      if (Array.isArray(j.assignedEmps) && j.assignedEmps.some(e => {
+        const name = typeof e === 'string' ? e : (e.name || e.empId || '');
+        return name.toLowerCase().includes(q);
+      })) return true;
+      return false;
+    };
+
+    const activeJobs    = allJobs.filter(j => j && j.status === 'active' && Array.isArray(j.assignedEmps) && j.assignedEmps.length > 0 && matchesQuery(j));
+    const pendingJobs   = allJobs.filter(j => j && (j.status === 'pending' || (j.status === 'active' && (!j.assignedEmps || j.assignedEmps.length === 0))) && matchesQuery(j));
+    const completedJobs = allJobs.filter(j => j && j.status === 'completed' && matchesQuery(j)).sort((a,b) => (b.endTime || 0) - (a.endTime || 0));
 
     return `
       <div class="flex items-center justify-between mb-8">
@@ -50,6 +66,13 @@ const Jobs = (() => {
           <div class="screen-sub">Manage active work & pending job tasks</div>
         </div>
         <button class="btn btn-primary" id="jobs-create-btn">+ Create Job</button>
+      </div>
+
+      <!-- Search Jobs -->
+      <div class="search-wrap mb-10">
+        <span class="search-icon">🔍</span>
+        <input type="search" class="search-input" id="jobs-search" placeholder="Search jobs by title, machine, section or worker…" value="${escHtml(_searchQuery || '')}">
+        <button type="button" class="voice-search-btn" id="jobs-voice-btn" title="Voice Search (Speak job or keyword)" aria-label="Voice Search">🎙️</button>
       </div>
 
       <!-- Segmented Tabs: Active | Pending | History -->
@@ -302,6 +325,42 @@ const Jobs = (() => {
   function setup() {
     document.getElementById('jobs-create-btn')?.addEventListener('click', showCreateModal);
     document.getElementById('jobs-empty-create-btn')?.addEventListener('click', showCreateModal);
+
+    // Search & Voice Search
+    const searchInput = document.getElementById('jobs-search');
+    const voiceBtn = document.getElementById('jobs-voice-btn');
+    if (searchInput) {
+      searchInput.addEventListener('input', e => {
+        _searchQuery = e.target.value;
+        const listEl = document.getElementById('jobs-content-list');
+        if (listEl) {
+          const allJobs = _jobs || [];
+          const q = (_searchQuery || '').toLowerCase().trim();
+          const matchesQuery = (j) => {
+            if (!q) return true;
+            if ((j.title || '').toLowerCase().includes(q)) return true;
+            if ((j.section || '').toLowerCase().includes(q)) return true;
+            if ((j.description || '').toLowerCase().includes(q)) return true;
+            if ((j.completionNotes || '').toLowerCase().includes(q)) return true;
+            if (Array.isArray(j.assignedEmps) && j.assignedEmps.some(e => {
+              const name = typeof e === 'string' ? e : (e.name || e.empId || '');
+              return name.toLowerCase().includes(q);
+            })) return true;
+            return false;
+          };
+          const activeJobs    = allJobs.filter(j => j && j.status === 'active' && Array.isArray(j.assignedEmps) && j.assignedEmps.length > 0 && matchesQuery(j));
+          const pendingJobs   = allJobs.filter(j => j && (j.status === 'pending' || (j.status === 'active' && (!j.assignedEmps || j.assignedEmps.length === 0))) && matchesQuery(j));
+          const completedJobs = allJobs.filter(j => j && j.status === 'completed' && matchesQuery(j)).sort((a,b) => (b.endTime || 0) - (a.endTime || 0));
+
+          listEl.innerHTML = _activeTab === 'active' ? renderActiveJobs(activeJobs) :
+            _activeTab === 'pending' ? renderPendingJobs(pendingJobs) :
+            renderCompletedJobs(completedJobs);
+        }
+      });
+      if (voiceBtn) {
+        App.initVoiceSearch(voiceBtn, searchInput);
+      }
+    }
 
     // Segment Tabs
     document.getElementById('jobs-segment-tabs')?.addEventListener('click', e => {

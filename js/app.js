@@ -43,6 +43,9 @@ const App = (() => {
       case 'reports':    Reports.render(); break;
       case 'settings':   Settings.render(); break;
     }
+    setTimeout(() => {
+      attachVoiceToInputs(document.getElementById(`screen-${screenName}`));
+    }, 80);
   }
 
   /* -------- Toast -------- */
@@ -110,8 +113,11 @@ const App = (() => {
       document.getElementById('modal-delete-btn').addEventListener('click', onDelete);
     }
 
-    // Focus first input
-    setTimeout(() => overlay.querySelector('input,select')?.focus(), 100);
+    // Automatically attach voice input to all text inputs & textareas inside modal
+    setTimeout(() => {
+      attachVoiceToInputs(overlay.querySelector('#modal-content') || overlay);
+      overlay.querySelector('input,select')?.focus();
+    }, 50);
   }
 
   function closeModal() {
@@ -766,5 +772,44 @@ const App = (() => {
     return null;
   }
 
-  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch, matchSection };
+  /* -------- Attach Voice Input to Any Text/Search Inputs in a Container -------- */
+  function attachVoiceToInputs(container = document) {
+    if (!container) return;
+    const inputs = container.querySelectorAll(
+      'input[type="text"]:not([data-no-voice]), input[type="search"]:not([data-no-voice]), input[type="tel"]:not([data-no-voice]), input:not([type]):not([data-no-voice]), textarea:not([data-no-voice])'
+    );
+
+    inputs.forEach(input => {
+      // Don't duplicate if already has voice button or explicitly marked
+      if (input.dataset.voiceAttached === 'true') return;
+      if (input.parentElement && input.parentElement.querySelector('.voice-search-btn')) return;
+
+      const parent = input.parentElement;
+      if (!parent) return;
+
+      // If parent is a standard form-group or block, wrap input in .input-voice-wrap
+      if (!parent.classList.contains('input-voice-wrap') && 
+          !parent.classList.contains('search-wrap') && 
+          !parent.classList.contains('att-search-wrap')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'input-voice-wrap';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+      }
+
+      const voiceBtn = document.createElement('button');
+      voiceBtn.type = 'button';
+      voiceBtn.className = 'voice-search-btn';
+      voiceBtn.title = 'Voice Input (Speak)';
+      voiceBtn.setAttribute('aria-label', 'Voice Input');
+      voiceBtn.innerHTML = '🎙️';
+
+      input.insertAdjacentElement('afterend', voiceBtn);
+      input.dataset.voiceAttached = 'true';
+
+      initVoiceSearch(voiceBtn, input);
+    });
+  }
+
+  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch, matchSection, attachVoiceToInputs };
 })();
