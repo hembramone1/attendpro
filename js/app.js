@@ -161,14 +161,25 @@ const App = (() => {
     const engagedEmpMap = new Map(); // empId -> jobTitle
     activeJobs.forEach(j => {
       (j.assignedEmps || []).forEach(e => {
-        if (presentToday.size === 0 || presentToday.has(e.empId)) {
-          engagedEmpMap.set(e.empId, j.title);
+        const empId = typeof e === 'string' ? e : e.empId;
+        if (empId && (presentToday.size === 0 || presentToday.has(empId))) {
+          engagedEmpMap.set(empId, j.title);
         }
       });
     });
 
+    // Foremen are supervisors, not worker manpower. Exclude Foremen from worker manpower pool.
+    const foremanEmpIds = new Set(
+      allEmps
+        .filter(e => {
+          const desig = (e.designation || '').toLowerCase().trim();
+          return desig.includes('foreman') || desig.includes('foremen');
+        })
+        .map(e => e.id)
+    );
+    const presentWorkerCount = [...presentToday].filter(id => !foremanEmpIds.has(id)).length;
     const engagedCount = engagedEmpMap.size;
-    const freeCount    = Math.max(0, totalPresent - engagedCount);
+    const freeCount    = Math.max(0, presentWorkerCount - engagedCount);
 
     // Section names
     const sectionNames = [...new Set(allEmps.map(e => e.section || 'Unassigned'))].sort((a,b) => a.localeCompare(b));
@@ -421,7 +432,11 @@ const App = (() => {
     document.getElementById('stat-card-free')?.addEventListener('click', () => {
       const freeSectionHTML = sectionNames.map(sec => {
         const empsInSec = allEmps.filter(e => (e.section || 'Unassigned') === sec);
-        const freeInSec = empsInSec.filter(e => (presentToday.size === 0 || presentToday.has(e.id)) && !engagedEmpMap.has(e.id));
+        const freeInSec = empsInSec.filter(e => {
+          const desig = (e.designation || '').toLowerCase().trim();
+          const isForeman = desig.includes('foreman') || desig.includes('foremen');
+          return !isForeman && (presentToday.size === 0 || presentToday.has(e.id)) && !engagedEmpMap.has(e.id);
+        });
         if (!freeInSec.length) return '';
 
         return `
@@ -441,7 +456,7 @@ const App = (() => {
 
       modal({
         title: '⚡ Free Manpower Breakdown',
-        subtitle: `${freeCount} present workers free for task assignment`,
+        subtitle: `${freeCount} present workers free for task assignment (excluding supervisory Foremen)`,
         html: freeSectionHTML
       });
     });
@@ -572,5 +587,98 @@ const App = (() => {
     return _currentScreen;
   }
 
-  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm };
+  /* -------- Voice Search Helper -------- */
+  function initVoiceSearch(btnEl, inputEl, onResult) {
+    if (!btnEl || !inputEl) return;
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      btnEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toast('Voice search is not supported in this browser. Please use Chrome, Edge or Safari.', 'warning', 3500);
+      });
+      return;
+    }
+
+    let recognition = null;
+    let isListening = false;
+    const originalPlaceholder = inputEl.placeholder || 'Search by name…';
+
+    function stopListening() {
+      if (recognition && isListening) {
+        try { recognition.stop(); } catch(e) {}
+      }
+      isListening = false;
+      btnEl.classList.remove('listening');
+      btnEl.title = 'Voice Search (Speak name)';
+      btnEl.innerHTML = '🎙️';
+      inputEl.placeholder = originalPlaceholder;
+    }
+
+    function startListening() {
+      try {
+        recognition = new SpeechRec();
+        recognition.lang = 'en-IN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 3;
+
+        recognition.onstart = () => {
+          isListening = true;
+          btnEl.classList.add('listening');
+          btnEl.title = 'Listening... Tap to stop';
+          btnEl.innerHTML = '🔴';
+          inputEl.placeholder = '🎙️ Listening... Speak name now';
+          toast('🎙️ Listening... Speak employee name', 'info', 2000);
+        };
+
+        recognition.onresult = (event) => {
+          if (!event.results || !event.results.length) return;
+          const transcript = event.results[0][0].transcript.trim();
+          const cleaned = transcript.replace(/[.,?!]+$/, '').trim();
+          if (cleaned) {
+            inputEl.value = cleaned;
+            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            inputEl.focus();
+            toast(`🎙️ "${cleaned}"`, 'success', 2000);
+            if (typeof onResult === 'function') onResult(cleaned);
+          }
+        };
+
+        recognition.onerror = (event) => {
+          if (event.error === 'no-speech') {
+            toast('No speech detected. Please try again.', 'info', 2000);
+          } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            toast('⚠️ Microphone permission is required for voice search.', 'warning', 3500);
+          } else if (event.error !== 'aborted') {
+            toast(`Voice search error: ${event.error}`, 'error', 2500);
+          }
+          stopListening();
+        };
+
+        recognition.onend = () => {
+          stopListening();
+        };
+
+        recognition.start();
+      } catch (err) {
+        console.error('Speech recognition error:', err);
+        stopListening();
+        toast('Could not start voice search', 'error');
+      }
+    }
+
+    btnEl.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isListening) {
+        stopListening();
+      } else {
+        startListening();
+      }
+    });
+  }
+
+  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch };
 })();

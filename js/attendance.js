@@ -123,7 +123,8 @@ const Attendance = (() => {
         <!-- Search to mark present -->
         <div class="att-search-wrap" style="position:relative; z-index:55;">
           <span class="att-search-icon">🔍</span>
-          <input class="att-search" id="att-search" placeholder="Type name to mark present…" autocomplete="off">
+          <input class="att-search" id="att-search" placeholder="Type or speak name to mark present…" autocomplete="off">
+          <button type="button" class="voice-search-btn" id="att-voice-btn" title="Voice Search (Speak name)" aria-label="Voice Search">🎙️</button>
           <div class="att-dropdown" id="att-dropdown" style="display:none;"></div>
         </div>
 
@@ -295,6 +296,12 @@ const Attendance = (() => {
       dropdownEl.style.display = 'none';
       searchEl.focus();
     });
+
+    // Voice Search
+    const voiceBtn = document.getElementById('att-voice-btn');
+    if (voiceBtn) {
+      App.initVoiceSearch(voiceBtn, searchEl);
+    }
 
     // Click-away to close dropdown
     document.addEventListener('click', (e) => {

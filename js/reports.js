@@ -68,10 +68,10 @@ const Reports = (() => {
     // Header
     let html = days.map(d => `<div class="cal-cell hd">${d}</div>`).join('');
 
-    // Get dates with records (attendance OR jobs)
+    // Get dates with records (attendance OR active/completed jobs)
     const datesWithData = new Set([
       ..._allRecords.map(r => r.date),
-      ..._allJobs.map(j => j.date)
+      ..._allJobs.filter(j => j.status !== 'pending' && j.startTime && Array.isArray(j.assignedEmps) && j.assignedEmps.length > 0).map(j => j.date)
     ]);
     const today = toYMD(new Date());
 
@@ -118,8 +118,8 @@ const Reports = (() => {
     const records = _allRecords.filter(r => r.date === date);
 
     if (!records.length) {
-      // Check if there are jobs even if attendance was not taken
-      const dateJobs = _allJobs.filter(j => j.date === date || (j.startTime && toYMD(new Date(j.startTime)) === date));
+      // Check if there are active/completed jobs even if attendance was not taken
+      const dateJobs = _allJobs.filter(j => j.status !== 'pending' && j.startTime && (j.date === date || toYMD(new Date(j.startTime)) === date));
       
       detail.innerHTML = `
         <div class="card mt-12 mb-12">
@@ -209,6 +209,14 @@ const Reports = (() => {
     const sectionHTML = Object.entries(sections).sort(([a],[b]) => a.localeCompare(b)).map(([sec, emps]) => {
       const pct  = totalBySec[sec] ? Math.round((emps.length / totalBySec[sec]) * 100) : 100;
       const color = pct >= 80 ? 'success' : pct >= 50 ? 'warning' : 'danger';
+
+      const sortedEmps = emps.slice().sort((a, b) => {
+        const pA = getRolePriority(a.designation);
+        const pB = getRolePriority(b.designation);
+        if (pA !== pB) return pA - pB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
       return `
         <div class="sec-report">
           <div class="sec-report-hd">
@@ -216,15 +224,26 @@ const Reports = (() => {
             <div class="sec-report-count" style="color:var(--${color})">${emps.length}${totalBySec[sec] ? ' / ' + totalBySec[sec] : ''}</div>
           </div>
           <div class="progress-bar" style="margin:0;border-radius:0;height:3px"><div class="progress-fill ${color}" style="width:${pct}%"></div></div>
-          <div class="sec-report-body">${emps.sort((a,b)=>a.name.localeCompare(b.name)).map(e => `<span class="name-chip">${esc(e.name)}</span>`).join('')}</div>
+          <div class="sec-report-body">
+            ${sortedEmps.map(e => {
+              const priority = getRolePriority(e.designation);
+              let extraStyle = '';
+              if (priority === 1) {
+                extraStyle = 'background:rgba(249,115,22,0.22);color:#ea580c;border:1px solid rgba(249,115,22,0.5);font-weight:800;';
+              } else if (priority === 2) {
+                extraStyle = 'background:rgba(14,165,233,0.22);color:#0284c7;border:1px solid rgba(14,165,233,0.5);font-weight:700;';
+              }
+              return `<span class="name-chip" style="${extraStyle}">${esc(e.name)}</span>`;
+            }).join('')}
+          </div>
         </div>
       `;
     }).join('');
 
-    const dateJobs = _allJobs.filter(j => j.date === _selectedDate || (j.startTime && toYMD(new Date(j.startTime)) === _selectedDate));
+    const dateJobs = _allJobs.filter(j => j.status !== 'pending' && j.startTime && (j.date === _selectedDate || toYMD(new Date(j.startTime)) === _selectedDate));
 
     body.innerHTML = `
-      <div class="card mb-12" style="display:flex;gap:16px;justify-content:space-around">
+      <div class="card mb-12" style="display:flex;gap:16px;justify-space-around">
         <div class="text-center"><div style="font-size:28px;font-weight:900;color:var(--success)">${present.length}</div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">Present</div></div>
         <div style="width:1px;background:var(--border)"></div>
         <div class="text-center"><div style="font-size:28px;font-weight:900;color:var(--danger)">${absent.length}</div><div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px">Absent</div></div>
@@ -241,19 +260,45 @@ const Reports = (() => {
   /* -------- Helper to Render Jobs Report HTML -------- */
 
   function renderJobsReportHTML(dateJobs) {
-    if (!dateJobs || !dateJobs.length) {
-      return `<div class="sec-label mt-16">🛠️ Jobs &amp; Work Performed</div><div class="card mb-12 text-center" style="padding:14px;color:var(--text-muted);font-size:13px">No jobs recorded for this date</div>`;
+    const startedJobs = (dateJobs || []).filter(j => 
+      j && j.status !== 'pending' && j.startTime && Array.isArray(j.assignedEmps) && j.assignedEmps.length > 0
+    );
+
+    if (!startedJobs.length) {
+      return `<div class="sec-label mt-16">🛠️ Jobs &amp; Work Performed</div><div class="card mb-12 text-center" style="padding:14px;color:var(--text-muted);font-size:13px">No active or completed jobs recorded for this date</div>`;
     }
 
-    const jobsHTML = dateJobs.map(job => {
+    const jobsHTML = startedJobs.map(job => {
       const isCompleted = job.status === 'completed';
       const startStr = job.startTime ? fmtTime(job.startTime) : 'N/A';
       const endStr = job.endTime ? fmtTime(job.endTime) : (isCompleted ? 'Finished' : 'In Progress');
-      const durStr = formatDuration(job.durationMs || (isCompleted ? 0 : (Date.now() - job.startTime)));
+      const durMs = isCompleted 
+        ? (job.durationMs || (job.endTime && job.startTime ? job.endTime - job.startTime : 0))
+        : (job.startTime ? Math.max(0, Date.now() - job.startTime) : 0);
+      const durStr = formatDuration(durMs);
 
-      const empsHTML = (job.assignedEmps || []).map(e => `
-        <span class="p-chip" style="font-size:11px;padding:3px 8px">👤 ${esc(e.name)} <span style="opacity:0.75;font-size:10px">(${esc(e.section || 'General')})</span></span>
-      `).join('');
+      const empsHTML = (job.assignedEmps || []).map(e => {
+        const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
+        const sec  = typeof e === 'string' ? 'General' : (e.section || 'General');
+        const tag  = typeof e !== 'string' && e.isAssisting ? ` <span style="font-size:9px;background:var(--accent);color:#fff;padding:1px 4px;border-radius:3px">Assisting</span>` : '';
+        return `<span class="p-chip" style="font-size:11px;padding:3px 8px">👤 ${esc(name)} <span style="opacity:0.75;font-size:10px">(${esc(sec)})</span>${tag}</span>`;
+      }).join('');
+
+      const subTasksHTML = (job.subTasks && job.subTasks.length) ? `
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">🤝 ASSISTANCE TASKS & SPECIALIST SUPPORT (${job.subTasks.length})</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            ${job.subTasks.map(st => {
+              const emps = (st.assignedEmps || []).map(e => {
+                const name = typeof e === 'string' ? e : (e.name || e.empId || 'Worker');
+                const sec  = typeof e === 'string' ? '' : (e.section ? ` · ${e.section}` : '');
+                return `<strong>${esc(name)}</strong>${esc(sec)}`;
+              }).join(', ');
+              return `<div style="font-size:11px;background:var(--bg-elevated);padding:4px 8px;border-radius:var(--radius-xs)">📌 <strong>${esc(st.title)}</strong> ${emps ? `<span style="color:var(--text-secondary)">— ${emps}</span>` : ''}</div>`;
+            }).join('')}
+          </div>
+        </div>
+      ` : '';
 
       return `
         <div class="card mb-12" style="border-left:4px solid ${isCompleted ? 'var(--success)' : 'var(--accent)'};padding:14px">
@@ -281,16 +326,27 @@ const Reports = (() => {
 
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;text-transform:uppercase">👥 Engaged Manpower (${(job.assignedEmps || []).length})</div>
-            <div class="flex flex-wrap gap-8">${empsHTML}</div>
+            <div class="flex flex-wrap gap-8">${empsHTML || '<span style="font-size:11px;color:var(--text-muted)">No manpower assigned</span>'}</div>
           </div>
+
+          ${subTasksHTML}
         </div>
       `;
     }).join('');
 
     return `
-      <div class="sec-label mt-16">🛠️ Jobs &amp; Work Performed (${dateJobs.length})</div>
+      <div class="sec-label mt-16">🛠️ Jobs &amp; Work Performed (${startedJobs.length})</div>
       ${jobsHTML}
     `;
+  }
+
+  /* -------- Helper to Render Designation Sort Priority -------- */
+
+  function getRolePriority(desig) {
+    const d = (desig || '').toLowerCase().trim();
+    if (d.includes('foreman') || d.includes('foremen')) return 1;
+    if (d.includes('main fitter') || d.includes('sr. auto electrician') || d.includes('sr auto electrician') || d.includes('senior auto electrician')) return 2;
+    return 3;
   }
 
   /* -------- Calendar Navigation -------- */
@@ -353,8 +409,8 @@ const Reports = (() => {
   }
 
   async function generateAndShare(record) {
-    if (!record) { App.toast('No attendance record to share', 'warning'); return; }
-    App.toast('Preparing to share…', 'info');
+    if (!record) { App.toast('No attendance record selected', 'warning'); return; }
+    App.toast('Preparing attendance image to share…', 'info');
 
     try {
       const tpl = document.getElementById('att-img-tpl');
@@ -429,6 +485,13 @@ const Reports = (() => {
       const pct = Math.round((emps.length / secTotal) * 100);
       const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#f43f5e';
 
+      const sortedEmps = emps.slice().sort((a, b) => {
+        const pA = getRolePriority(a.designation);
+        const pB = getRolePriority(b.designation);
+        if (pA !== pB) return pA - pB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
       return `
         <div class="ait-section">
           <div class="ait-sec-hd">
@@ -436,12 +499,23 @@ const Reports = (() => {
             <div class="ait-sec-cnt" style="color:${color}">${emps.length} / ${secTotal} Present</div>
           </div>
           <div class="ait-emp-grid">
-            ${emps.sort((a,b) => a.name.localeCompare(b.name)).map((e, i) => `
-              <div class="ait-emp">
-                <span class="ait-emp-num">${i+1}.</span>
-                <span class="ait-emp-name">${esc(e.name)}</span>
-              </div>
-            `).join('')}
+            ${sortedEmps.map((e, i) => {
+              const priority = getRolePriority(e.designation);
+              let cardStyle = 'background: #ffffff; border: 1px solid #e2e8f0;';
+
+              if (priority === 1) {
+                cardStyle = 'background: #ffedd5; border: 1.5px solid #f97316;';
+              } else if (priority === 2) {
+                cardStyle = 'background: #e0f2fe; border: 1.5px solid #0ea5e9;';
+              }
+
+              return `
+                <div class="ait-emp" style="${cardStyle}">
+                  <span class="ait-emp-num" style="${priority === 1 ? 'color:#c2410c;font-weight:800' : priority === 2 ? 'color:#0369a1;font-weight:700' : ''}">${i+1}.</span>
+                  <span class="ait-emp-name" style="${priority === 1 ? 'color:#9a3412;font-weight:800' : priority === 2 ? 'color:#075985;font-weight:700' : ''}">${esc(e.name)}</span>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
       `;

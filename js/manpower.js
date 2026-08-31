@@ -46,6 +46,7 @@ const Manpower = (() => {
       <div class="search-wrap mb-8">
         <span class="search-icon">🔍</span>
         <input type="search" class="search-input" id="mp-search" placeholder="Search by name or ID…">
+        <button type="button" class="voice-search-btn" id="mp-voice-btn" title="Voice Search (Speak name)" aria-label="Voice Search">🎙️</button>
       </div>
 
       <!-- Section filter tabs -->
@@ -146,11 +147,19 @@ const Manpower = (() => {
   }
 
   function setup() {
+    const searchInput = document.getElementById('mp-search');
+    const voiceBtn = document.getElementById('mp-voice-btn');
+
     // Search
-    document.getElementById('mp-search').addEventListener('input', e => {
-      _searchQuery = e.target.value.toLowerCase().trim();
-      renderList();
-    });
+    if (searchInput) {
+      searchInput.addEventListener('input', e => {
+        _searchQuery = e.target.value.toLowerCase().trim();
+        renderList();
+      });
+      if (voiceBtn) {
+        App.initVoiceSearch(voiceBtn, searchInput);
+      }
+    }
 
     // Section tabs
     document.getElementById('mp-section-tabs').addEventListener('click', e => {
