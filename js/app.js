@@ -593,6 +593,182 @@ const App = (() => {
     return _currentScreen;
   }
 
+  /* -------- Speech Numbers & Text Intelligence Engine -------- */
+  const SMALL_NUMBERS = {
+    'zero': 0, 'oh': 0, 'o': 0, 'null': 0,
+    'one': 1, 'won': 1,
+    'two': 2, 'to': 2, 'too': 2,
+    'three': 3, 'tree': 3,
+    'four': 4, 'for': 4, 'fore': 4,
+    'five': 5,
+    'six': 6,
+    'seven': 7,
+    'eight': 8, 'ate': 8,
+    'nine': 9,
+    'ten': 10,
+    'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+    'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19,
+    'twenty': 20, 'thirty': 30, 'forty': 40, 'fourty': 40, 'fifty': 50,
+    'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90
+  };
+
+  function convertSpokenNumbersToDigits(text) {
+    if (!text) return '';
+    let str = text.trim();
+
+    // 1. Handle multipliers: "double seven" -> "77", "triple six" -> "666"
+    str = str.replace(/\b(double|doble)\s+(\w+)/gi, (match, p1, p2) => {
+      const p2Low = p2.toLowerCase();
+      const digit = SMALL_NUMBERS[p2Low] !== undefined ? SMALL_NUMBERS[p2Low] : (/^\d$/.test(p2) ? p2 : null);
+      return digit !== null ? `${digit}${digit}` : match;
+    });
+
+    str = str.replace(/\b(triple|tripple)\s+(\w+)/gi, (match, p1, p2) => {
+      const p2Low = p2.toLowerCase();
+      const digit = SMALL_NUMBERS[p2Low] !== undefined ? SMALL_NUMBERS[p2Low] : (/^\d$/.test(p2) ? p2 : null);
+      return digit !== null ? `${digit}${digit}${digit}` : match;
+    });
+
+    // 2. Handle composite numbers like "six hundred forty four" -> "644", "twenty five" -> "25"
+    str = str.replace(/\b(one|two|three|four|five|six|seven|eight|nine)\s+hundred(\s+(and\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety))?(\s+(one|two|three|four|five|six|seven|eight|nine))?\b/gi, (match) => {
+      try {
+        const val = parseSpokenNumberPhrase(match);
+        return val !== null ? String(val) : match;
+      } catch(e) { return match; }
+    });
+
+    str = str.replace(/\b(twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety)\s+(one|two|three|four|five|six|seven|eight|nine)\b/gi, (match, tens, ones) => {
+      const tVal = SMALL_NUMBERS[tens.toLowerCase()] || 0;
+      const oVal = SMALL_NUMBERS[ones.toLowerCase()] || 0;
+      return String(tVal + oVal);
+    });
+
+    // 3. Convert single digits in number-heavy contexts or consecutive single digit words
+    // e.g. "six four four" -> "644", "one zero two" -> "102"
+    const words = str.split(/\s+/);
+    const convertedWords = [];
+    let digitBuffer = [];
+
+    const flushDigitBuffer = () => {
+      if (digitBuffer.length > 0) {
+        convertedWords.push(digitBuffer.join(''));
+        digitBuffer = [];
+      }
+    };
+
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      const wLow = w.toLowerCase().replace(/[.,?!]/g, '');
+      const numVal = SMALL_NUMBERS[wLow];
+
+      if (numVal !== undefined && numVal < 10) {
+        digitBuffer.push(numVal);
+      } else if (/^\d+$/.test(wLow)) {
+        digitBuffer.push(wLow);
+      } else {
+        flushDigitBuffer();
+        convertedWords.push(w);
+      }
+    }
+    flushDigitBuffer();
+
+    return convertedWords.join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function parseSpokenNumberPhrase(phrase) {
+    const tokens = phrase.toLowerCase().replace(/and/g, '').trim().split(/\s+/);
+    let total = 0;
+    let current = 0;
+    for (const t of tokens) {
+      if (t === 'hundred') {
+        current = (current === 0 ? 1 : current) * 100;
+      } else if (t === 'thousand') {
+        total += (current === 0 ? 1 : current) * 1000;
+        current = 0;
+      } else if (SMALL_NUMBERS[t] !== undefined) {
+        current += SMALL_NUMBERS[t];
+      } else if (!isNaN(parseInt(t))) {
+        current += parseInt(t);
+      }
+    }
+    return total + current;
+  }
+
+  function parseVoiceTranscript(rawTranscript, inputEl) {
+    if (!rawTranscript) return { text: '', isNumber: false, isSection: false, isName: false, category: 'text' };
+    const cleaned = rawTranscript.replace(/[.,?!]+$/, '').trim();
+
+    // Check if target input is numeric-oriented (Phone, ID, Number)
+    const isExplicitNumericInput = inputEl && (
+      inputEl.type === 'tel' || 
+      inputEl.type === 'number' || 
+      (inputEl.id && /phone|mobile|emp-id|empid|id|count|qty|hours/i.test(inputEl.id)) ||
+      (inputEl.name && /phone|mobile|emp-id|empid|id|count|qty|hours/i.test(inputEl.name)) ||
+      (inputEl.placeholder && /phone|mobile|id|number|#/i.test(inputEl.placeholder))
+    );
+
+    // Convert spoken numbers (e.g. "six four four" -> "644", "double seven" -> "77")
+    const withDigits = convertSpokenNumbersToDigits(cleaned);
+
+    // Check if the result is purely numeric or starts with digits
+    const digitsOnly = withDigits.replace(/[^\d]/g, '');
+    const isPurelyDigits = /^\d+$/.test(withDigits.replace(/\s+/g, ''));
+    const hasSignificantNumbers = digitsOnly.length > 0 && (digitsOnly.length >= withDigits.replace(/[^a-zA-Z0-9]/g, '').length / 2);
+
+    if (isExplicitNumericInput) {
+      // Return clean extracted digits for numeric fields (e.g. Phone "9876543210" or ID "102")
+      const resultDigits = digitsOnly || withDigits;
+      return {
+        text: resultDigits,
+        isNumber: true,
+        isSection: false,
+        isName: false,
+        category: 'number',
+        toastMsg: `🔢 Number: "${resultDigits}"`
+      };
+    }
+
+    // If whole utterance is a number (e.g. "644", "102", "777", "98765")
+    if (isPurelyDigits || (digitsOnly.length >= 2 && /^(emp|id|dumper|machine|number|no|#)?\s*\d+$/i.test(withDigits))) {
+      const numStr = withDigits.replace(/^(emp|id|number|no|#)\s*/i, '').trim();
+      return {
+        text: numStr,
+        isNumber: true,
+        isSection: false,
+        isName: false,
+        category: 'number',
+        toastMsg: `🔢 Number: "${numStr}"`
+      };
+    }
+
+    // Capitalize names / text titles cleanly
+    let formattedText = withDigits;
+    if (inputEl && (inputEl.id?.includes('name') || inputEl.placeholder?.toLowerCase().includes('name'))) {
+      // Capitalize each word in name (e.g. "rajesh kumar" -> "Rajesh Kumar")
+      formattedText = formattedText.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      return {
+        text: formattedText,
+        isNumber: false,
+        isSection: false,
+        isName: true,
+        category: 'name',
+        toastMsg: `👤 Name: "${formattedText}"`
+      };
+    }
+
+    // General text (Job title, Notes, Description)
+    // Capitalize first letter of sentence
+    formattedText = formattedText.charAt(0).toUpperCase() + formattedText.slice(1);
+    return {
+      text: formattedText,
+      isNumber: hasSignificantNumbers,
+      isSection: false,
+      isName: false,
+      category: 'text',
+      toastMsg: `🎙️ "${formattedText}"`
+    };
+  }
+
   /* -------- Voice Search Helper -------- */
   function initVoiceSearch(btnEl, inputEl, onResult) {
     if (!btnEl || !inputEl) return;
@@ -617,7 +793,7 @@ const App = (() => {
       }
       isListening = false;
       btnEl.classList.remove('listening');
-      btnEl.title = 'Voice Search (Speak name)';
+      btnEl.title = 'Voice Search (Speak)';
       btnEl.innerHTML = '🎙️';
       inputEl.placeholder = originalPlaceholder;
     }
@@ -635,24 +811,29 @@ const App = (() => {
           btnEl.classList.add('listening');
           btnEl.title = 'Listening... Tap to stop';
           btnEl.innerHTML = '🔴';
-          inputEl.placeholder = '🎙️ Listening... Speak name now';
-          toast('🎙️ Listening... Speak employee name', 'info', 2000);
+          inputEl.placeholder = '🎙️ Listening... Speak now';
+          toast('🎙️ Listening... Speak clearly', 'info', 2000);
         };
 
         recognition.onresult = (event) => {
           if (!event.results || !event.results.length) return;
-          const transcript = event.results[0][0].transcript.trim();
-          const cleaned = transcript.replace(/[.,?!]+$/, '').trim();
-          if (cleaned) {
+          const rawTranscript = event.results[0][0].transcript.trim();
+
+          // Parse speech intelligently into Number vs Text
+          const parsed = parseVoiceTranscript(rawTranscript, inputEl);
+          const finalVal = parsed.text;
+
+          if (finalVal) {
             let handled = false;
             if (typeof onResult === 'function') {
-              handled = onResult(cleaned);
+              handled = onResult(finalVal, parsed);
             }
             if (!handled) {
-              inputEl.value = cleaned;
+              inputEl.value = finalVal;
               inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+              inputEl.dispatchEvent(new Event('change', { bubbles: true }));
               inputEl.focus();
-              toast(`🎙️ "${cleaned}"`, 'success', 2000);
+              toast(parsed.toastMsg || `🎙️ "${finalVal}"`, 'success', 2200);
             }
           }
         };
@@ -811,5 +992,5 @@ const App = (() => {
     });
   }
 
-  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch, matchSection, attachVoiceToInputs };
+  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch, matchSection, attachVoiceToInputs, parseVoiceTranscript, convertSpokenNumbersToDigits };
 })();
