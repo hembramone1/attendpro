@@ -638,11 +638,16 @@ const App = (() => {
           const transcript = event.results[0][0].transcript.trim();
           const cleaned = transcript.replace(/[.,?!]+$/, '').trim();
           if (cleaned) {
-            inputEl.value = cleaned;
-            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-            inputEl.focus();
-            toast(`🎙️ "${cleaned}"`, 'success', 2000);
-            if (typeof onResult === 'function') onResult(cleaned);
+            let handled = false;
+            if (typeof onResult === 'function') {
+              handled = onResult(cleaned);
+            }
+            if (!handled) {
+              inputEl.value = cleaned;
+              inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+              inputEl.focus();
+              toast(`🎙️ "${cleaned}"`, 'success', 2000);
+            }
           }
         };
 
@@ -680,5 +685,86 @@ const App = (() => {
     });
   }
 
-  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch };
+  /* -------- Section Matcher for Voice Search -------- */
+  function matchSection(phrase, sections, employees) {
+    if (!phrase) return null;
+    const lower = phrase.toLowerCase().trim();
+
+    // Check for Foremen
+    if (lower.includes('foreman') || lower.includes('foremen') || lower.includes('supervisor')) {
+      return { key: '__foremen__', name: 'Foremen', isForemen: true };
+    }
+
+    // Clean noise words
+    const clean = lower
+      .replace(/\b(section|department|dept|manpower|staff|worker|workers|people|team|group|all|show|mark|present|absent|attendance|ka|ki|ke|ko|se)\b/gi, '')
+      .replace(/[^\w\s-]/g, '')
+      .trim();
+
+    // Collect all available section names from DB and employees
+    const secNames = new Set([
+      ...(sections || []).map(s => s && s.name).filter(Boolean),
+      ...(employees || []).map(e => e && e.section).filter(Boolean)
+    ]);
+
+    // 1. Exact match with cleaned or original
+    for (const name of secNames) {
+      const n = name.toLowerCase().trim();
+      if (n === clean || n === lower) {
+        return { key: name, name: name, isForemen: false };
+      }
+    }
+
+    // 2. Substring match
+    if (clean.length >= 3) {
+      for (const name of secNames) {
+        const n = name.toLowerCase().trim();
+        if (n.includes(clean) || clean.includes(n)) {
+          return { key: name, name: name, isForemen: false };
+        }
+      }
+    }
+
+    // 3. Common industrial sections & aliases
+    const aliases = {
+      'office': 'Office',
+      'engine': 'Engine',
+      'hydraulic': 'Hydraulic',
+      'hydraulics': 'Hydraulic',
+      'hydrolic': 'Hydraulic',
+      'transmission': 'Transmission',
+      'trans': 'Transmission',
+      'electrical': 'Auto Electrical',
+      'electric': 'Auto Electrical',
+      'electrician': 'Auto Electrical',
+      'auto electric': 'Auto Electrical',
+      'auto electrical': 'Auto Electrical',
+      'auto electrician': 'Auto Electrical',
+      'welding': 'Welding',
+      'weld': 'Welding',
+      'welder': 'Welding',
+      'dumper': 'Dump Truck',
+      'dump truck': 'Dump Truck',
+      'truck': 'Dump Truck',
+      'undercarriage': 'Undercarriage',
+      'under carriage': 'Undercarriage',
+      'tyre': 'Tyre',
+      'tire': 'Tyre',
+      'store': 'Store',
+      'stores': 'Store',
+      'maintenance': 'Maintenance',
+      'general': 'General'
+    };
+
+    for (const [alias, secTarget] of Object.entries(aliases)) {
+      if (clean.includes(alias) || lower.includes(alias)) {
+        const realName = Array.from(secNames).find(s => s.toLowerCase() === secTarget.toLowerCase()) || secTarget;
+        return { key: realName, name: realName, isForemen: false };
+      }
+    }
+
+    return null;
+  }
+
+  return { navigate, refreshCurrentScreen, getCurrentScreen, toast, modal, closeModal, confirm, initVoiceSearch, matchSection };
 })();

@@ -123,8 +123,8 @@ const Attendance = (() => {
         <!-- Search to mark present -->
         <div class="att-search-wrap" style="position:relative; z-index:55;">
           <span class="att-search-icon">🔍</span>
-          <input class="att-search" id="att-search" placeholder="Type or speak name to mark present…" autocomplete="off">
-          <button type="button" class="voice-search-btn" id="att-voice-btn" title="Voice Search (Speak name)" aria-label="Voice Search">🎙️</button>
+          <input class="att-search" id="att-search" placeholder="Speak section (e.g. Office) or employee name…" autocomplete="off">
+          <button type="button" class="voice-search-btn" id="att-voice-btn" title="Voice Search (Speak section or name)" aria-label="Voice Search">🎙️</button>
           <div class="att-dropdown" id="att-dropdown" style="display:none;"></div>
         </div>
 
@@ -297,10 +297,12 @@ const Attendance = (() => {
       searchEl.focus();
     });
 
-    // Voice Search
+    // Voice Search with Section Auto-Marking
     const voiceBtn = document.getElementById('att-voice-btn');
     if (voiceBtn) {
-      App.initVoiceSearch(voiceBtn, searchEl);
+      App.initVoiceSearch(voiceBtn, searchEl, (spokenText) => {
+        return handleVoiceSectionOrName(spokenText, searchEl, dropdownEl);
+      });
     }
 
     // Click-away to close dropdown
@@ -309,6 +311,75 @@ const Attendance = (() => {
         dropdownEl.style.display = 'none';
       }
     }, { once: false });
+  }
+
+  /* -------- Voice Command: Section Auto-Marking & Switch -------- */
+
+  function handleVoiceSectionOrName(spokenText, searchEl, dropdownEl) {
+    if (!spokenText) return false;
+
+    // Check if spoken phrase matches a section name or Foremen
+    const matchedSec = App.matchSection(spokenText, _state.sections, _state.employees);
+
+    if (matchedSec) {
+      const isForemenTab = matchedSec.key === '__foremen__';
+      const secEmps = (_state.employees || []).filter(emp => {
+        if (!emp) return false;
+        const desig = (emp.designation || '').toLowerCase().trim();
+        const isF = desig.includes('foreman') || desig.includes('foremen');
+        if (isForemenTab) return isF;
+        return (emp.section || '') === matchedSec.key && !isF;
+      });
+
+      if (!secEmps.length) {
+        App.toast(`Section "${matchedSec.name}" found, but has 0 employees.`, 'info', 2500);
+        return true;
+      }
+
+      if (!_state.isFinalized) {
+        // Automatically mark all employees of this section as present
+        secEmps.forEach(emp => {
+          _state.presentIds.add(emp.id);
+        });
+        autoSave();
+      }
+
+      // Switch active section tab to this section
+      _state.filterSec = matchedSec.key;
+      const tabContainer = document.getElementById('att-sec-tabs');
+      if (tabContainer) {
+        tabContainer.querySelectorAll('.sec-tab').forEach(b => {
+          b.classList.toggle('active', b.dataset.sec === matchedSec.key);
+        });
+      }
+
+      // Clear search input and hide dropdown so section list is fully visible
+      if (searchEl) searchEl.value = '';
+      if (dropdownEl) dropdownEl.style.display = 'none';
+
+      // Refresh all UI elements
+      renderEmployeeList();
+      refreshCounter();
+      refreshPresentChips();
+      updateSectionTabs();
+      updateStatusBar();
+      updateFinalizeBtn();
+
+      // Scroll employee list into view
+      const listEl = document.getElementById('att-emp-list');
+      if (listEl) {
+        listEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      App.toast(
+        `🎙️ "${matchedSec.name}": ${secEmps.length} marked Present! (Tap any name to mark absent)`,
+        'success',
+        4000
+      );
+      return true; // Handled as section
+    }
+
+    return false; // Not a section, proceed to regular name search
   }
 
   /* -------- Mark Present / Absent -------- */

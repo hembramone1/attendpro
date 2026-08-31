@@ -157,7 +157,21 @@ const Manpower = (() => {
         renderList();
       });
       if (voiceBtn) {
-        App.initVoiceSearch(voiceBtn, searchInput);
+        App.initVoiceSearch(voiceBtn, searchInput, (spokenText) => {
+          const matchedSec = App.matchSection(spokenText, _sections, _employees);
+          if (matchedSec) {
+            _filterSection = matchedSec.key;
+            _searchQuery = '';
+            searchInput.value = '';
+            document.querySelectorAll('#mp-section-tabs .sec-tab').forEach(b => {
+              b.classList.toggle('active', b.dataset.sec === matchedSec.key);
+            });
+            renderList();
+            App.toast(`🎙️ Filtered to "${matchedSec.name}" section`, 'info', 2500);
+            return true;
+          }
+          return false;
+        });
       }
     }
 
